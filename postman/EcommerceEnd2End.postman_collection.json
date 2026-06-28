@@ -25,6 +25,16 @@
       "key": "productId",
       "value": "1",
       "type": "string"
+    },
+    {
+      "key": "cartItemId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "1",
+      "type": "string"
     }
   ],
   "auth": {
@@ -705,6 +715,418 @@
               "path": ["products"]
             },
             "description": "No Authorization header.\nExpected: 401 Unauthorized or 403 Forbidden"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🛒 Phase 5 — Cart",
+      "item": [
+        {
+          "name": "Get My Cart",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/cart",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart"]
+            },
+            "description": "Get logged-in user's cart.\nCart is created automatically on first add.\nReturns: items[], totalItems, totalPrice"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Item to Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.items && json.data.items.length > 0) {",
+                  "    var firstItem = json.data.items[0];",
+                  "    pm.collectionVariables.set('cartItemId', firstItem.cartItemId);",
+                  "    console.log('Cart item ID saved:', firstItem.cartItemId);",
+                  "    console.log('Cart total:', json.data.totalPrice);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items"]
+            },
+            "description": "Add a product to cart.\nIf product already in cart → quantity is incremented.\nBusiness rule: cannot exceed stock_quantity."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Same Item Again (qty increments)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items"]
+            },
+            "description": "Add same product again → existing CartItem.quantity goes from 2 to 3"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Item Quantity",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/{{cartItemId}}?quantity=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items", "{{cartItemId}}"],
+              "query": [{ "key": "quantity", "value": "5" }]
+            },
+            "description": "Update quantity of a specific cart item.\nquantity=0 → removes the item entirely."
+          },
+          "response": []
+        },
+        {
+          "name": "Set Quantity to 0 (removes item)",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/{{cartItemId}}?quantity=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items", "{{cartItemId}}"],
+              "query": [{ "key": "quantity", "value": "0" }]
+            },
+            "description": "Setting quantity=0 removes the CartItem row from DB."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Item from Cart",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/{{cartItemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items", "{{cartItemId}}"]
+            },
+            "description": "Hard remove a specific item from cart."
+          },
+          "response": []
+        },
+        {
+          "name": "Clear Entire Cart",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/cart",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart"]
+            },
+            "description": "Removes ALL items from cart. Cart row stays (empty).\nThis is called automatically when order is placed."
+          },
+          "response": []
+        },
+        {
+          "name": "Add Item — Exceed Stock (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 9999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items"]
+            },
+            "description": "Expected: 400 Bad Request\n{ success: false, message: 'Only X units available for: ...' }"
+          },
+          "response": []
+        },
+        {
+          "name": "Access Cart Without Token (expect 401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/cart",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart"]
+            },
+            "description": "No JWT token.\nExpected: 401 Unauthorized"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📋 Phase 6 — Orders",
+      "item": [
+        {
+          "name": "Place Order (from cart)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.orderId) {",
+                  "    pm.collectionVariables.set('orderId', json.data.orderId);",
+                  "    console.log('Order ID saved:', json.data.orderId);",
+                  "    console.log('Total:', json.data.totalPrice);",
+                  "    console.log('Status:', json.data.status);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Places order from current cart.\n\nWhat happens internally:\n1. Cart loaded — must not be empty\n2. Stock checked for every item\n3. Order + OrderItems created (price snapshot)\n4. Stock deducted for each product\n5. Cart cleared\nAll in ONE @Transactional — any failure = full rollback\n\nExpected: 201 Created, status: PENDING"
+          },
+          "response": []
+        },
+        {
+          "name": "Place Order — With Address",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddressId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Place order with specific shipping address.\nAddress must belong to the logged-in user."
+          },
+          "response": []
+        },
+        {
+          "name": "Place Order — Empty Cart (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"]
+            },
+            "description": "Cart was just cleared after placing an order.\nExpected: 400 Bad Request\n{ message: 'Cannot place order: cart is empty' }"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Orders",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Paginated order history for logged-in user.\nSorted by most recent first."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            },
+            "description": "Get full order detail including items and priceAtPurchase.\nNote: priceAtPurchase is the HISTORICAL price — not current product price."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "cancel"]
+            },
+            "description": "Cancel a PENDING or CONFIRMED order.\nInternally: restores stock for each item in @Transactional.\n\nError: 400 if status is SHIPPED or DELIVERED"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status (Admin)",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/status?status=SHIPPED",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "status"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "SHIPPED",
+                  "description": "Options: PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED"
+                }
+              ]
+            },
+            "description": "Admin only. Moves order through lifecycle:\nPENDING → CONFIRMED → PROCESSING → SHIPPED → DELIVERED\n\nRequires ROLE_ADMIN token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💳 Phase 7 — Payments",
+      "item": [
+        {
+          "name": "Initiate Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.paymentReference) {",
+                  "    console.log('Payment reference:', json.data.paymentReference);",
+                  "    console.log('Status:', json.data.status);",
+                  "    console.log('Amount:', json.data.amount);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments/initiate/{{orderId}}?method=UPI",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "initiate", "{{orderId}}"],
+              "query": [
+                {
+                  "key": "method",
+                  "value": "UPI",
+                  "description": "Options: CREDIT_CARD, DEBIT_CARD, UPI, NET_BANKING, WALLET, COD"
+                }
+              ]
+            },
+            "description": "Step 1: Start payment. Creates PENDING payment record.\nReturns paymentReference (simulated gateway ID).\n\nIn production: calls Razorpay/Stripe API → returns gateway order ID\nFrontend uses this ID to open payment widget."
+          },
+          "response": []
+        },
+        {
+          "name": "Initiate Payment — Credit Card",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments/initiate/{{orderId}}?method=CREDIT_CARD",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "initiate", "{{orderId}}"],
+              "query": [{ "key": "method", "value": "CREDIT_CARD" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Payment (simulate success)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments/confirm/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "confirm", "{{orderId}}"]
+            },
+            "description": "Step 2: Confirm payment success.\nUpdates Payment → COMPLETED\nUpdates Order → CONFIRMED\nBoth in one @Transactional.\n\nIn production: this is a WEBHOOK from Razorpay/Stripe.\nNot triggered by the user — triggered by the gateway after card is charged.\n\nIdempotent: calling this twice returns same result (no double-charge)."
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Payment Again (idempotency test)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments/confirm/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "confirm", "{{orderId}}"]
+            },
+            "description": "Call confirm twice to test idempotency.\nExpected: same 200 response — NOT a 500 error.\nPayment stays COMPLETED, not processed twice."
+          },
+          "response": []
+        },
+        {
+          "name": "Fail Payment (simulate failure)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/payments/fail/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "fail", "{{orderId}}"]
+            },
+            "description": "Simulate failed payment (card declined, user closed window, etc.)\nPayment → FAILED. Order stays PENDING.\nUser can retry by calling initiate again."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment for Order",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/payments/order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "order", "{{orderId}}"]
+            },
+            "description": "View payment details for an order.\nShows: amount, status, method, paymentReference, timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "Full Happy Path Test",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "COMPLETE HAPPY PATH (run these in sequence):\n\n1. POST /auth/register  → get token\n2. [Make user ADMIN in DB]\n3. POST /auth/login     → get admin token\n4. POST /categories     → create Electronics\n5. POST /products       → create iPhone (use categoryId)\n6. POST /cart/items     → add iPhone qty=2\n7. GET  /cart           → verify cart total\n8. POST /orders         → place order (stock deducted, cart cleared)\n9. GET  /orders/{id}    → see order with priceAtPurchase snapshot\n10. POST /payments/initiate/{orderId}?method=UPI  → get reference\n11. POST /payments/confirm/{orderId}               → COMPLETED + CONFIRMED\n12. POST /payments/confirm/{orderId} AGAIN         → idempotent, same result\n13. GET  /payments/order/{orderId}                 → view payment\n14. [PATCH /orders/{id}/status?status=SHIPPED]     → admin moves order"
           },
           "response": []
         }
