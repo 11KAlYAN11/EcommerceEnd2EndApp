@@ -1,0 +1,732 @@
+{
+  "info": {
+    "name": "EcommerceEnd2End API",
+    "description": "Complete Postman collection for the Ecommerce Backend — Phases 1-4.\nBase URL: http://localhost:8080/api\n\nFlow:\n1. Health Check (no auth)\n2. Register → copy token\n3. Set token in collection variable\n4. All other requests auto-use it",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string",
+      "description": "Auto-filled after login/register. Or paste your JWT here."
+    },
+    {
+      "key": "categoryId",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "productId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "📡 Phase 1 — Health",
+      "item": [
+        {
+          "name": "App Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Returns app status, version, active profile, uptime.\nExpected: 200 OK, success: true, status: UP"
+          },
+          "response": []
+        },
+        {
+          "name": "Database Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health/db",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "db"]
+            },
+            "description": "Returns DB connectivity status.\nExpected: 200 OK, status: UP"
+          },
+          "response": []
+        },
+        {
+          "name": "Memory Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health/memory",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "memory"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator — Health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Spring Boot built-in health. Shows disk space, DB, ping."
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator — Info",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/info",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "info"]
+            },
+            "description": "Shows app name, version, description from application.properties"
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator — Metrics List",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics"]
+            },
+            "description": "Lists all available metrics (JVM memory, HTTP requests, HikariCP, etc.)"
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator — JVM Memory",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics/jvm.memory.used",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics", "jvm.memory.used"]
+            },
+            "description": "Current JVM heap memory in bytes"
+          },
+          "response": []
+        },
+        {
+          "name": "Swagger UI",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/swagger-ui.html",
+              "host": ["{{baseUrl}}"],
+              "path": ["swagger-ui.html"]
+            },
+            "description": "Open this in a browser — not Postman.\nShows all API endpoints with try-it-out."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Phase 3 — Auth",
+      "item": [
+        {
+          "name": "Register — New User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Token saved to collection variable!');",
+                  "    console.log('User:', json.data.email);",
+                  "} else {",
+                  "    console.log('Registration failed or token missing');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alice\",\n  \"lastName\": \"Smith\",\n  \"email\": \"alice@test.com\",\n  \"password\": \"password123\",\n  \"phone\": \"9876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user.\n\nAuto-saves JWT token to {{token}} collection variable.\nAll subsequent requests use this token automatically.\n\nExpected: 201 Created\nError cases:\n- 409 Conflict → email already registered\n- 400 Bad Request → validation failed (blank fields, short password)"
+          },
+          "response": []
+        },
+        {
+          "name": "Register — Admin User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Admin token saved!');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"email\": \"admin@test.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Registers as ROLE_USER by default.\nTo promote to ROLE_ADMIN: update the user_roles table manually in DB:\n  INSERT INTO user_roles (user_id, role_id) VALUES (2, 2);\nwhere role_id 2 = ROLE_ADMIN"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "    console.log('Token refreshed! User:', json.data.email);",
+                  "    console.log('Roles:', JSON.stringify(json.data.roles));",
+                  "} else {",
+                  "    console.log('Login failed:', json.message);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with existing credentials.\nAuto-saves token to {{token}}.\n\nExpected: 200 OK + token\nError cases:\n- 401 Unauthorized → wrong email or password\n- 400 Bad Request → blank fields"
+          },
+          "response": []
+        },
+        {
+          "name": "Login — Wrong Password (expect 401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@test.com\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Expected: 401 Unauthorized\n{ success: false, message: 'Invalid email or password' }"
+          },
+          "response": []
+        },
+        {
+          "name": "Register — Validation Error (expect 400)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"\",\n  \"lastName\": \"Smith\",\n  \"email\": \"not-an-email\",\n  \"password\": \"123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Expected: 400 Bad Request with field-level errors:\n- firstName: required\n- email: invalid format\n- password: min 6 chars"
+          },
+          "response": []
+        },
+        {
+          "name": "Register — Duplicate Email (expect 409)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"Alice\",\n  \"lastName\": \"Smith\",\n  \"email\": \"alice@test.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register same email twice.\nExpected: 409 Conflict\n{ success: false, message: 'Email already registered: alice@test.com' }"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📦 Phase 4 — Categories",
+      "item": [
+        {
+          "name": "Create Category (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('categoryId', json.data.id);",
+                  "    console.log('Category ID saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electronics\",\n  \"description\": \"Phones, laptops, gadgets and accessories\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            },
+            "description": "Create a category. Requires ROLE_ADMIN.\n\nTo make your user admin:\n1. Look up your user_id from the users table\n2. Look up role_id for ROLE_ADMIN from roles table\n3. INSERT INTO user_roles (user_id, role_id) VALUES (?, ?);\n4. Login again to get a fresh token with ROLE_ADMIN"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category — Clothing",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    console.log('Clothing category ID:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Clothing\",\n  \"description\": \"Men, women and kids clothing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category — Books",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Books\",\n  \"description\": \"Fiction, non-fiction, technical books\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Categories",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories"]
+            },
+            "description": "Public endpoint — no auth needed.\nReturns all active categories."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["categories", "{{categoryId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🛍️ Phase 4 — Products",
+      "item": [
+        {
+          "name": "Create Product — iPhone",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('productId', json.data.id);",
+                  "    console.log('Product ID saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPhone 15 Pro\",\n  \"description\": \"Apple iPhone 15 Pro, 256GB, Titanium Black\",\n  \"price\": 134900.00,\n  \"stockQuantity\": 50,\n  \"imageUrl\": \"https://example.com/iphone15pro.jpg\",\n  \"categoryId\": {{categoryId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Requires ROLE_ADMIN.\nUses {{categoryId}} from Create Category response."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product — MacBook",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"MacBook Pro M3\",\n  \"description\": \"Apple MacBook Pro 14-inch, M3 chip, 16GB RAM, 512GB SSD\",\n  \"price\": 199900.00,\n  \"stockQuantity\": 20,\n  \"imageUrl\": \"https://example.com/macbook.jpg\",\n  \"categoryId\": {{categoryId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product — Samsung Galaxy",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samsung Galaxy S24 Ultra\",\n  \"description\": \"Samsung Galaxy S24 Ultra, 12GB RAM, 256GB, Titanium Gray\",\n  \"price\": 129999.00,\n  \"stockQuantity\": 35,\n  \"imageUrl\": \"https://example.com/s24ultra.jpg\",\n  \"categoryId\": {{categoryId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Products (paginated)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products?page=0&size=10&sortBy=name",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page", "value": "0", "description": "0-indexed page number" },
+                { "key": "size", "value": "10", "description": "items per page" },
+                { "key": "sortBy", "value": "name", "description": "field to sort by: name, price, createdAt" }
+              ]
+            },
+            "description": "Public endpoint — no auth.\nResponse includes:\n  content[] → array of products\n  totalElements → total product count\n  totalPages → how many pages\n  number → current page\n  size → page size"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Products — Page 2",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products?page=1&size=2&sortBy=price",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "size", "value": "2" },
+                { "key": "sortBy", "value": "price" }
+              ]
+            },
+            "description": "Second page with 2 items per page, sorted by price"
+          },
+          "response": []
+        },
+        {
+          "name": "Search Products",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products?search=iphone&page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "search", "value": "iphone", "description": "Case-insensitive search in product name" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Search by name (case-insensitive, partial match).\nTries: 'iphone', 'samsung', 'mac', 'phone'"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Products by Category",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/category/{{categoryId}}?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "category", "{{categoryId}}"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Get all products under a specific category"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "Get one product by ID.\nError: 404 if not found or soft-deleted"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Product — Not Found (expect 404)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/99999",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "99999"]
+            },
+            "description": "Expected: 404 Not Found\n{ success: false, message: 'Product not found with id: 99999' }"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Product (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPhone 15 Pro Max\",\n  \"description\": \"Updated: Apple iPhone 15 Pro Max, 512GB, Natural Titanium\",\n  \"price\": 159900.00,\n  \"stockQuantity\": 45,\n  \"imageUrl\": \"https://example.com/iphone15promax.jpg\",\n  \"categoryId\": {{categoryId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "Update product. Requires ROLE_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Product (Admin) — Soft Delete",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "Soft delete — sets active=false.\nProduct stays in DB (preserves order history).\nDisappears from GET /products listings.\nRequires ROLE_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Product — Validation Error (expect 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"price\": -100,\n  \"stockQuantity\": -5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "Expected: 400 with field errors:\n- name: required\n- price: must be > 0\n- stockQuantity: cannot be negative\n- categoryId: required"
+          },
+          "response": []
+        },
+        {
+          "name": "Access Admin Endpoint Without Auth (expect 403)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test\",\n  \"price\": 100,\n  \"stockQuantity\": 10,\n  \"categoryId\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"]
+            },
+            "description": "No Authorization header.\nExpected: 401 Unauthorized or 403 Forbidden"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔧 DB Helpers (read this folder)",
+      "item": [
+        {
+          "name": "README — How to make user ADMIN",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "HOW TO PROMOTE A USER TO ROLE_ADMIN\n\n1. Register a user via POST /auth/register\n   Note the user's email\n\n2. Connect to PostgreSQL (pgAdmin or psql):\n   psql -U postgres -d ecommerce_dev\n\n3. Find the user_id:\n   SELECT id, email FROM users;\n\n4. Find or insert ROLE_ADMIN into roles:\n   SELECT * FROM roles;\n   -- If ROLE_ADMIN doesn't exist yet:\n   INSERT INTO roles (name) VALUES ('ROLE_ADMIN');\n\n5. Grant admin role:\n   INSERT INTO user_roles (user_id, role_id)\n   SELECT u.id, r.id\n   FROM users u, roles r\n   WHERE u.email = 'admin@test.com'\n   AND r.name = 'ROLE_ADMIN';\n\n6. Login again (POST /auth/login) to get a fresh token with ROLE_ADMIN\n\n7. Copy the new token into {{token}} collection variable\n\n8. Now Create Category and Create Product requests will work"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
