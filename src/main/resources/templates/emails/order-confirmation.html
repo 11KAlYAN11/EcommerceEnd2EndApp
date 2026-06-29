@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 30px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .header { background: #1a73e8; color: white; padding: 30px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; }
+    .body { padding: 30px; }
+    .order-id { font-size: 18px; color: #555; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+    th { background: #f0f0f0; padding: 10px; text-align: left; font-size: 13px; color: #666; }
+    td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+    .total-row td { font-weight: bold; font-size: 16px; border-top: 2px solid #ddd; }
+    .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #aaa; }
+    .badge { display: inline-block; background: #e6f4ea; color: #2e7d32; padding: 4px 12px; border-radius: 12px; font-weight: bold; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Order Confirmed ✓</h1>
+    <p>Thank you for shopping with us!</p>
+  </div>
+  <div class="body">
+    <p>Hi <strong th:text="${firstName}">Customer</strong>,</p>
+    <p>Your order has been placed successfully.</p>
+
+    <div class="order-id">
+      Order <strong>#<span th:text="${orderId}">0</span></strong>
+      &nbsp;&nbsp;<span class="badge" th:text="${status}">PENDING</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Unit Price</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr th:each="item : ${items}">
+          <td th:text="${item.product.name}">Product Name</td>
+          <td th:text="${item.quantity}">1</td>
+          <td th:text="'₹' + ${item.priceAtPurchase}">₹0</td>
+          <td th:text="'₹' + ${item.priceAtPurchase * item.quantity}">₹0</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="3">Total</td>
+          <td th:text="'₹' + ${totalPrice}">₹0</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <p style="color:#888; font-size:13px;">Placed on: <span th:text="${placedAt}">-</span></p>
+    <p>We'll send you another email when your order is shipped.</p>
+  </div>
+  <div class="footer">
+    © 2026 EcommerceApp · You received this because you placed an order.
+  </div>
+</div>
+</body>
+</html>

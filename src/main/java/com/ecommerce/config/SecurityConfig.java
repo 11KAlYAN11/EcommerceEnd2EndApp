@@ -3,6 +3,7 @@ package com.ecommerce.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -62,14 +63,14 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins:*}")
     private String allowedOrigins;
 
-    // Endpoints that don't require authentication
     private static final String[] PUBLIC_URLS = {
             "/auth/**",
             "/health/**",
             "/actuator/**",
             "/v3/api-docs/**",
             "/swagger-ui/**",
-            "/swagger-ui.html"
+            "/swagger-ui.html",
+            "/dev/**"          // dev-only bootstrap endpoints (disable in prod)
     };
 
     @Bean
@@ -79,6 +80,8 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
                     .requestMatchers(PUBLIC_URLS).permitAll()
+                    // Anyone can browse products, categories, search, and uploaded images
+                    .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/search/**", "/files/**").permitAll()
                     .anyRequest().authenticated()
             )
             .sessionManagement(session ->

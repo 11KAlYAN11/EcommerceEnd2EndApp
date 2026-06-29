@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 30px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .header { background: #1a73e8; color: white; padding: 40px 30px; text-align: center; }
+    .header h1 { margin: 0 0 8px 0; font-size: 28px; }
+    .header p { margin: 0; opacity: 0.9; font-size: 15px; }
+    .body { padding: 30px; color: #333; line-height: 1.7; }
+    .steps { background: #f8f9ff; border-radius: 8px; padding: 20px 30px; margin: 20px 0; }
+    .steps h3 { margin-top: 0; color: #1a73e8; }
+    .steps ol { margin: 0; padding-left: 20px; }
+    .steps li { margin-bottom: 8px; }
+    .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #aaa; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Welcome to EcommerceApp!</h1>
+    <p>Your account is ready.</p>
+  </div>
+  <div class="body">
+    <p>Hi <strong th:text="${firstName}">Customer</strong>,</p>
+    <p>Your account has been created successfully with email <strong th:text="${email}">-</strong>.</p>
+
+    <div class="steps">
+      <h3>Get started in 3 steps</h3>
+      <ol>
+        <li>Browse products at <strong>GET /api/products</strong></li>
+        <li>Add items to your cart at <strong>POST /api/cart/items</strong></li>
+        <li>Place your order at <strong>POST /api/orders</strong></li>
+      </ol>
+    </div>
+
+    <p>Happy shopping!</p>
+  </div>
+  <div class="footer">© 2026 EcommerceApp · You received this because you registered an account.</div>
+</div>
+</body>
+</html>

@@ -166,6 +166,47 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- ── Phase 8: Redis Cache ──────────────────────────────────────────
+             spring-boot-starter-data-redis gives us:
+               - RedisTemplate: low-level Redis operations (set, get, expire)
+               - @Cacheable, @CacheEvict, @CachePut annotations
+               - Spring Cache abstraction: swap Redis for anything without changing code
+             Lettuce is the default Redis client (async, thread-safe).
+             Jedis is the old synchronous client — Lettuce is preferred now.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- ── Phase 11: Email ───────────────────────────────────────────────
+             spring-boot-starter-mail gives us:
+               - JavaMailSender (Spring's email abstraction)
+               - MimeMessage (HTML emails with attachments)
+               - Auto-configured from application.properties
+             Works with any SMTP server: Gmail, SendGrid, AWS SES, Mailgun.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!-- Thymeleaf — email template engine (HTML email bodies) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.thymeleaf.extras</groupId>
+            <artifactId>thymeleaf-extras-springsecurity6</artifactId>
+        </dependency>
+
+        <!-- ── Phase 10: File Upload ─────────────────────────────────────────
+             No extra dependency needed for local file storage.
+             In production you'd add AWS SDK or MinIO client here.
+             For learning we use Spring's MultipartFile + local disk.
+        -->
+
         <!-- Swagger / OpenAPI -->
         <dependency>
             <groupId>org.springdoc</groupId>

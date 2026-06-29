@@ -6,6 +6,7 @@ import com.ecommerce.cart.Cart;
 import com.ecommerce.cart.CartItem;
 import com.ecommerce.cart.CartService;
 import com.ecommerce.common.exception.ResourceNotFoundException;
+import com.ecommerce.notification.EmailService;
 import com.ecommerce.order.dto.OrderItemResponse;
 import com.ecommerce.order.dto.OrderResponse;
 import com.ecommerce.order.dto.PlaceOrderRequest;
@@ -35,6 +36,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final AddressRepository addressRepository;
     private final CartService cartService;
+    private final EmailService emailService;
 
     /**
      * Place an order from the user's current cart.
@@ -100,6 +102,8 @@ public class OrderService {
         cartService.clearCart(email);
 
         log.info("Order placed: orderId={}, user={}, total={}", saved.getId(), email, total);
+        // Fire-and-forget — runs in background thread, doesn't block the response
+        emailService.sendOrderConfirmation(user, saved);
         return toResponse(saved);
     }
 
@@ -153,6 +157,7 @@ public class OrderService {
         Order saved = orderRepository.save(order);
 
         log.info("Order cancelled: orderId={}, user={}", orderId, email);
+        emailService.sendOrderCancellation(user, saved);
         return toResponse(saved);
     }
 

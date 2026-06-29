@@ -2,11 +2,15 @@ package com.ecommerce.product;
 
 import com.ecommerce.category.Category;
 import com.ecommerce.category.CategoryRepository;
+import java.math.BigDecimal;
 import com.ecommerce.common.exception.ResourceNotFoundException;
 import com.ecommerce.product.dto.ProductRequest;
 import com.ecommerce.product.dto.ProductResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,7 +27,8 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
 
-    // Public: anyone can browse products (no auth needed)
+    // Paginated list is NOT cached — too many key combinations (page+size+sort+search)
+    // Single-product and list-all are the cache candidates
     @Transactional(readOnly = true)
     public Page<ProductResponse> getProducts(int page, int size, String sortBy, String search) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy).ascending());
@@ -45,6 +50,7 @@ public class ProductService {
                 .map(this::toResponse);
     }
 
+    @Cacheable(value = "product", key = "#id")
     @Transactional(readOnly = true)
     public ProductResponse getProduct(Long id) {
         Product product = findActiveProductById(id);
@@ -53,6 +59,7 @@ public class ProductService {
 
     // Admin only
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "product", allEntries = true)
     @Transactional
     public ProductResponse createProduct(ProductRequest request) {
         Category category = categoryRepository.findById(request.getCategoryId())
@@ -73,6 +80,7 @@ public class ProductService {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "product", key = "#id")
     @Transactional
     public ProductResponse updateProduct(Long id, ProductRequest request) {
         Product product = findActiveProductById(id);
@@ -90,12 +98,32 @@ public class ProductService {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @CacheEvict(value = "product", key = "#id")
     @Transactional
     public void deleteProduct(Long id) {
         Product product = findActiveProductById(id);
         product.setActive(false); // soft delete — preserves order history
         productRepository.save(product);
         log.info("Product soft-deleted: id={}", id);
+    }
+
+    // Phase 10 — update image URL after file upload
+    @CacheEvict(value = "product", key = "#id")
+    @Transactional
+    public void updateImageUrl(Long id, String imageUrl) {
+        Product product = findActiveProductById(id);
+        product.setImageUrl(imageUrl);
+        productRepository.save(product);
+    }
+
+    // Phase 9 — advanced search with optional filters
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> searchWithFilters(
+            String keyword, BigDecimal minPrice, BigDecimal maxPrice,
+            Long categoryId, int page, int size, String sortBy) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy).ascending());
+        return productRepository.searchWithFilters(keyword, minPrice, maxPrice, categoryId, pageable)
+                .map(this::toResponse);
     }
 
     private Product findActiveProductById(Long id) {

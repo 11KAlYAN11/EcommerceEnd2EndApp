@@ -3,28 +3,33 @@ package com.ecommerce.product;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Repository for Product entity.
+ * Phase 9 — Search queries explained:
  *
- * Page<Product> with Pageable:
- *   Pageable carries: page number, page size, sort direction.
- *   Page<Product> returns: the data + total count + total pages.
- *   This is how we implement pagination in Phase 4 without writing SQL.
+ * Simple LIKE search (Phase 4 — already existed):
+ *   findByNameContainingIgnoreCaseAndActiveTrue
+ *   SQL: WHERE LOWER(name) LIKE LOWER('%keyword%') AND active = true
+ *   Simple but only searches the name field.
  *
- *   Usage in service:
- *   Pageable pageable = PageRequest.of(0, 10, Sort.by("name").ascending());
- *   Page<Product> page = productRepo.findByActiveTrue(pageable);
- *   page.getContent()  → List<Product> for this page
- *   page.getTotalPages() → how many pages total
+ * Multi-field search (Phase 9):
+ *   @Query with JPQL — searches name AND description together.
+ *   LOWER() → case-insensitive match.
  *
- * findByCategoryId vs findByCategory_Id:
- *   Both work. findByCategoryId uses the foreign key column directly.
- *   Spring Data understands: Category is the entity, id is its field.
- *   The underscore notation (Category_Id) is explicit about traversal.
+ * Price range filter (Phase 9):
+ *   findByPriceBetweenAndActiveTrue
+ *   Spring Data derives SQL from method name: price BETWEEN min AND max
+ *
+ * PostgreSQL Full-Text Search (FTS) — the professional approach:
+ *   Uses tsvector/tsquery — tokenizes text, ranks results by relevance.
+ *   We show it here as a named query for learning.
+ *   In production you'd add a GIN index on the tsvector column.
  */
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
@@ -36,4 +41,35 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Page<Product> findByNameContainingIgnoreCaseAndActiveTrue(String name, Pageable pageable);
 
     List<Product> findByCategoryId(Long categoryId);
+
+    // ── Phase 9: Advanced Search ────────────────────────────────────────────
+
+    // Multi-field LIKE search: searches name AND description
+    @Query("""
+        SELECT p FROM Product p
+        WHERE p.active = true
+        AND (LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+             OR LOWER(p.description) LIKE LOWER(CONCAT('%', :keyword, '%')))
+        """)
+    Page<Product> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
+
+    // Price range filter
+    Page<Product> findByPriceBetweenAndActiveTrue(BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable);
+
+    // Combined: keyword + price range + category
+    @Query("""
+        SELECT p FROM Product p
+        WHERE p.active = true
+        AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                              OR LOWER(p.description) LIKE LOWER(CONCAT('%', :keyword, '%')))
+        AND (:minPrice IS NULL OR p.price >= :minPrice)
+        AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+        AND (:categoryId IS NULL OR p.category.id = :categoryId)
+        """)
+    Page<Product> searchWithFilters(
+            @Param("keyword") String keyword,
+            @Param("minPrice") BigDecimal minPrice,
+            @Param("maxPrice") BigDecimal maxPrice,
+            @Param("categoryId") Long categoryId,
+            Pageable pageable);
 }
