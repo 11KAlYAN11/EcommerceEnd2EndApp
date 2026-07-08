@@ -6,6 +6,7 @@ import com.ecommerce.auth.dto.RegisterRequest;
 import com.ecommerce.common.exception.ConflictException;
 import com.ecommerce.common.util.JwtUtil;
 import com.ecommerce.notification.EmailService;
+import com.ecommerce.observability.MetricsService;
 import com.ecommerce.user.Role;
 import com.ecommerce.user.RoleRepository;
 import com.ecommerce.user.User;
@@ -35,6 +36,7 @@ public class AuthService {
     private final UserDetailsService userDetailsService;
     private final JwtUtil jwtUtil;
     private final EmailService emailService;
+    private final MetricsService metricsService;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -57,6 +59,7 @@ public class AuthService {
 
         userRepository.save(user);
         log.info("New user registered: {}", user.getEmail());
+        metricsService.incrementRegistrations(); // Phase 14 — track registration count
         emailService.sendWelcome(user); // async — doesn't block registration response
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());

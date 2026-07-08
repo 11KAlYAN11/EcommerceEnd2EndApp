@@ -21,9 +21,9 @@
 | [Phase 10](Phase-10-File-Upload.md) | File Upload | MultipartFile, UUID naming, MIME validation, disk→S3 pattern | ✅ |
 | [Phase 11](Phase-11-Email-Notifications.md) | Email & Notifications | @Async, thread pool, Thymeleaf, Gmail SMTP, MimeMessage | ✅ |
 | [Phase 12](Phase-12-Advanced-Querying.md) | Advanced Querying | JOIN FETCH (N+1 fix), aggregates, COALESCE, dynamic filters, admin dashboard | ✅ |
-| Phase 13 | Testing | Unit, Integration, TestContainers, @SpringBootTest | 🔜 |
-| Phase 14 | Observability | Micrometer, Prometheus, Grafana, Structured Logging | 🔜 |
-| Phase 15 | Production Hardening | Rate limiting, Circuit breaker, HTTPS, Docker | 🔜 |
+| [Phase 13](Phase-13-Testing.md) | Testing | JUnit5, Mockito, @WebMvcTest, MockMvc, @WithMockUser, H2, ReflectionTestUtils | ✅ |
+| [Phase 14](Phase-14-Observability.md) | Observability | MDC correlation ID, Micrometer, Prometheus, custom counters/gauges/timers | ✅ |
+| [Phase 15](Phase-15-Production-Hardening.md) | Production Hardening | Rate limiting, security headers, multi-stage Docker, graceful shutdown, prod profile | ✅ |
 | Phase 16 | Microservices Intro | Service decomposition, API Gateway, Service discovery | 🔜 |
 | Phase 17 | Message Queues | Kafka / RabbitMQ, async order processing | 🔜 |
 | Phase 18 | Event Sourcing | CQRS, Event store, eventual consistency | 🔜 |
@@ -42,6 +42,8 @@
 | 403 on GET /products and GET /categories | 4 | SecurityConfig had `anyRequest().authenticated()` | Added public GET access for products and categories |
 | 403 on POST /categories (admin) | 4 | No way to promote user to ADMIN | Created `DevController` with `@Profile("dev")` and `/dev/make-admin` |
 | `getOrCreateCart()` inaccessible | 5 | Method was package-private, OrderService is different package | Added `public` modifier |
+| 403 returns Spring HTML error page | 15 | No `AccessDeniedException` handler in `GlobalExceptionHandler` | Added handler returning standard `ApiResponse` |
+| `@MockBean` not found in tests | 13 | Spring Boot 3.4+ renamed to `@MockitoBean` | Pinned project to Spring Boot 3.3.0 where `@MockBean` works |
 
 ---
 
@@ -78,6 +80,13 @@ Docs:         SpringDoc OpenAPI (Swagger UI at /api/swagger-ui.html)
 | orphanRemoval | Remove from collection in Java = DELETE row in DB |
 | Pagination | Load subset of records — `Pageable`, `Page<T>`, `?page=0&size=20` |
 | @PreAuthorize | AOP intercepts method — checks role before body executes |
+| MDC | Per-thread key-value store — puts correlation ID in every log line |
+| Micrometer | Vendor-neutral metrics facade — Counter, Gauge, Timer |
+| Rate Limiting | Sliding window: max N requests per IP per time window |
+| HSTS | HTTP header: browser caches "always use HTTPS" for N seconds |
+| Multi-stage Docker | Build stage (JDK) → Run stage (JRE + JAR) → smaller, safer image |
+| Graceful Shutdown | Finish in-flight requests before JVM exits |
+| ddl-auto=validate | Hibernate checks schema matches entities — never auto-alter in prod |
 
 ---
 
@@ -92,4 +101,9 @@ Products:   CRUD /api/products (GET public, write = ADMIN) + search + pagination
 Cart:       GET/POST/PUT/DELETE /api/cart (authenticated)
 Orders:     POST/GET /api/orders, DELETE cancel, PATCH status (ADMIN)
 Payments:   POST/GET /api/payments, confirm/fail/refund
+Search:     GET  /api/search/products?q=&minPrice=&maxPrice=&categoryId=
+Upload:     POST /api/upload/image, /api/upload/product/{id}/image (ADMIN)
+Admin:      GET  /api/admin/dashboard, /api/admin/revenue, /api/admin/top-customers
+            GET  /api/admin/orders (filtered), PATCH /api/admin/orders/{id}/status
+Actuator:   GET  /api/actuator/health, /api/actuator/prometheus, /api/actuator/metrics
 ```

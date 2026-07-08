@@ -1,0 +1,136 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 15 — Docker Compose
+#
+# WHY DOCKER COMPOSE?
+#   Our app needs 3 things running: app server + PostgreSQL + Redis
+#   Without Compose: start each manually in correct order, configure each,
+#   remember ports, manage networks — tedious and error-prone.
+#   With Compose: one command (docker compose up) starts everything,
+#   in the right order, on the right network. One file, reproducible setup.
+#
+# USAGE:
+#   Development:
+#     docker compose up postgres redis      # start only DB + Redis (run app in IDE)
+#     docker compose up                     # start everything including the app
+#
+#   Build and start fresh:
+#     docker compose up --build             # rebuild app image before starting
+#
+#   Stop everything:
+#     docker compose down                   # stops and removes containers
+#     docker compose down -v                # also deletes volumes (wipes DB data!)
+#
+# NETWORKS:
+#   All services are on the same Docker network (ecommerce-network).
+#   Services talk to each other by service name:
+#     App connects to postgres:5432 (not localhost:5432)
+#     App connects to redis:6379
+#   "postgres" resolves to the PostgreSQL container's IP automatically.
+#
+# VOLUMES:
+#   postgres-data: persists DB data between container restarts
+#   Without volume: every "docker compose down" wipes the database
+#
+# ENVIRONMENT VARIABLES:
+#   NEVER commit real passwords to docker-compose.yml
+#   Use a .env file (gitignored): docker compose reads it automatically
+#   Create .env in the same directory:
+#     DB_PASSWORD=your-real-password
+#     JWT_SECRET=your-64-char-random-secret
+#     MAIL_PASSWORD=your-app-password
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: ecommerce-postgres
+    environment:
+      POSTGRES_DB: ecommerce_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-root}
+    ports:
+      - "5432:5432"        # host:container — expose to localhost for tools like pgAdmin
+    volumes:
+      - postgres-data:/var/lib/postgresql/data   # persist across restarts
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecommerce_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ecommerce-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # maxmemory-policy allkeys-lru:
+    #   When Redis is full, evict the Least Recently Used keys.
+    #   This is ideal for caching: stale/old cache entries are removed first.
+    #   Without this: Redis returns errors when full (bad for a cache).
+    networks:
+      - ecommerce-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot App ─────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ecommerce-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/ecommerce_dev
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-ecommerce-super-secret-key-change-in-production-must-be-at-least-256-bits}
+      MAIL_USERNAME: ${MAIL_USERNAME:-programmer143143@gmail.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-your-app-password}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads-data:/app/uploads   # persist uploaded images
+    depends_on:
+      postgres:
+        condition: service_healthy  # wait for postgres to be truly ready
+      redis:
+        condition: service_healthy
+    networks:
+      - ecommerce-network
+    restart: unless-stopped         # auto-restart on crash (not on manual stop)
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
+             "http://localhost:8080/api/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s             # give JVM time to start up before checking
+
+# ── Named Volumes ──────────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+    driver: local
+  uploads-data:
+    driver: local
+
+# ── Network ────────────────────────────────────────────────────────────────────
+networks:
+  ecommerce-network:
+    driver: bridge
+    # bridge network: services can reach each other by name, isolated from host

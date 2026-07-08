@@ -7,6 +7,7 @@ import com.ecommerce.cart.CartItem;
 import com.ecommerce.cart.CartService;
 import com.ecommerce.common.exception.ResourceNotFoundException;
 import com.ecommerce.notification.EmailService;
+import com.ecommerce.observability.MetricsService;
 import com.ecommerce.order.dto.OrderItemResponse;
 import com.ecommerce.order.dto.OrderResponse;
 import com.ecommerce.order.dto.PlaceOrderRequest;
@@ -22,7 +23,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -37,6 +41,7 @@ public class OrderService {
     private final AddressRepository addressRepository;
     private final CartService cartService;
     private final EmailService emailService;
+    private final MetricsService metricsService;
 
     /**
      * Place an order from the user's current cart.
@@ -102,7 +107,7 @@ public class OrderService {
         cartService.clearCart(email);
 
         log.info("Order placed: orderId={}, user={}, total={}", saved.getId(), email, total);
-        // Fire-and-forget — runs in background thread, doesn't block the response
+        metricsService.incrementOrdersPlaced(); // Phase 14 — track order count
         emailService.sendOrderConfirmation(user, saved);
         return toResponse(saved);
     }
@@ -159,6 +164,30 @@ public class OrderService {
         log.info("Order cancelled: orderId={}, user={}", orderId, email);
         emailService.sendOrderCancellation(user, saved);
         return toResponse(saved);
+    }
+
+    /**
+     * Admin: paginated, filterable view of ALL orders.
+     *
+     * WHY @Transactional(readOnly=true) here?
+     *   order.getItems() is a LAZY collection. Accessing it outside a transaction
+     *   throws LazyInitializationException. By keeping this method @Transactional,
+     *   the JPA session stays open while we call toResponse() → items are loaded.
+     *   readOnly=true: tells Hibernate to skip dirty-checking → slight perf gain.
+     *
+     * WHY return Page<OrderResponse> not Page<Order>?
+     *   If we returned Page<Order>, Jackson would serialize it AFTER this method
+     *   returns and the transaction closes → LazyInitializationException on items/user.
+     *   Mapping to DTO inside this @Transactional method solves that completely.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> getAllOrdersFiltered(
+            Order.OrderStatus status, LocalDateTime from, LocalDateTime to,
+            int page, int size) {
+        return orderRepository.findByFilters(status, from, to,
+                PageRequest.of(page, size, Sort.by("createdAt").descending()))
+                .map(this::toResponse);
     }
 
     // Admin: update order status (CONFIRMED → PROCESSING → SHIPPED → DELIVERED)

@@ -207,11 +207,33 @@
              For learning we use Spring's MultipartFile + local disk.
         -->
 
+        <!-- ── Phase 14: Observability ──────────────────────────────────────────
+             micrometer-registry-prometheus:
+               - Adds /actuator/prometheus endpoint
+               - Prometheus scrapes this endpoint every N seconds
+               - Metrics stored in time-series DB → Grafana dashboard
+             Without this: metrics are in-memory only (SimpleMeterRegistry)
+             micrometer-core is already included via spring-boot-starter-actuator
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Swagger / OpenAPI -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>2.5.0</version>
+        </dependency>
+
+        <!-- spring-security-test: needed for @WithMockUser in @WebMvcTest tests.
+             NOT included automatically in spring-boot-starter-test —
+             must be declared explicitly. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <!--

@@ -2,13 +2,10 @@ package com.ecommerce.admin;
 
 import com.ecommerce.common.response.ApiResponse;
 import com.ecommerce.order.Order;
-import com.ecommerce.order.OrderRepository;
 import com.ecommerce.order.dto.OrderResponse;
 import com.ecommerce.order.OrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+
 
 /**
  * Phase 12 — Admin endpoints for business analytics and order management.
@@ -29,7 +27,6 @@ import java.util.Map;
 public class AdminDashboardController {
 
     private final AdminDashboardService dashboardService;
-    private final OrderRepository orderRepository;
     private final OrderService orderService;
 
     /**
@@ -65,17 +62,22 @@ public class AdminDashboardController {
     /**
      * GET /api/admin/orders?status=PENDING&from=...&to=...&page=0&size=20
      * Filter + paginate all orders (admin view)
+     *
+     * WHY OrderResponse not Page<Order>?
+     * Order has LAZY fields (user, shippingAddress, items). With open-in-view=false,
+     * the JPA session closes after @Transactional returns. Jackson then tries to
+     * serialize the lazy proxy → LazyInitializationException → 500.
+     * Solution: map to DTO inside @Transactional (in OrderService.getAllOrdersFiltered).
      */
     @GetMapping("/orders")
-    public ResponseEntity<ApiResponse<Page<Order>>> getAllOrders(
+    public ResponseEntity<ApiResponse<Page<OrderResponse>>> getAllOrders(
             @RequestParam(required = false) Order.OrderStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        Page<Order> orders = orderRepository.findByFilters(status, from, to,
-                PageRequest.of(page, size, Sort.by("createdAt").descending()));
-        return ResponseEntity.ok(ApiResponse.success("Orders", orders));
+        return ResponseEntity.ok(ApiResponse.success("Orders",
+                orderService.getAllOrdersFiltered(status, from, to, page, size)));
     }
 
     /**

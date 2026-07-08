@@ -1,0 +1,1113 @@
+{
+  "info": {
+    "name": "E-Commerce Backend API — Phases 0-15",
+    "description": "Complete API collection for the Spring Boot E-Commerce backend.\n\n## Setup\n1. Import this collection into Postman\n2. Set collection variable `baseUrl` to `http://localhost:8080/api`\n3. Run **Auth / Register** → then **Auth / Login** → the `authToken` variable is set automatically\n4. ADMIN endpoints: run **Dev / Make Admin** first, then re-login to get an ADMIN token\n\n## Variable Reference\n| Variable | Description |\n|---|---|\n| `baseUrl` | Base URL (default: http://localhost:8080/api) |\n| `authToken` | JWT token — auto-set on login |\n| `adminToken` | JWT token for admin user — set manually after admin login |\n| `userId` | Set after register/login |\n| `productId` | Set after create product |\n| `categoryId` | Set after create category |\n| `cartItemId` | Set after add to cart |\n| `orderId` | Set after place order |\n| `paymentId` | Set after initiate payment |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",    "value": "http://localhost:8080/api", "type": "string" },
+    { "key": "authToken",  "value": "", "type": "string" },
+    { "key": "adminToken", "value": "", "type": "string" },
+    { "key": "productId",  "value": "1",  "type": "string" },
+    { "key": "categoryId", "value": "1",  "type": "string" },
+    { "key": "cartItemId", "value": "1",  "type": "string" },
+    { "key": "orderId",    "value": "1",  "type": "string" },
+    { "key": "addressId",  "value": "1",  "type": "string" }
+  ],
+  "item": [
+
+    {
+      "name": "🏥 Health",
+      "description": "Public health check endpoints — no auth required.",
+      "item": [
+        {
+          "name": "App Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Basic liveness check. Returns app name, version, status."
+          }
+        },
+        {
+          "name": "Database Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health/db", "host": ["{{baseUrl}}"], "path": ["health", "db"] },
+            "description": "Tests DB connectivity with a SELECT 1. Returns 200 if DB is reachable, 503 otherwise."
+          }
+        },
+        {
+          "name": "Memory Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health/memory", "host": ["{{baseUrl}}"], "path": ["health", "memory"] },
+            "description": "Returns JVM heap used/max. Returns 503 if memory usage > 90%."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔐 Auth",
+      "description": "Registration and login. JWT token is auto-extracted on login.",
+      "item": [
+        {
+          "name": "Register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.data && body.data.token) {",
+                  "        pm.collectionVariables.set('authToken', body.data.token);",
+                  "        console.log('Token saved:', body.data.token.substring(0,30) + '...');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\",\n  \"phone\": \"9876543210\"\n}"
+            },
+            "description": "Creates a new user account. Returns JWT token on success (201).\n\nValidation rules:\n- email: must be valid format\n- password: minimum 6 characters\n- firstName, lastName: required\n\nAuto-saves token to `authToken` collection variable."
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.data && body.data.token) {",
+                  "        pm.collectionVariables.set('authToken', body.data.token);",
+                  "        console.log('Token saved. Role check: decode at jwt.io');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "description": "Authenticates user. Returns JWT token.\n\nAuto-saves token to `authToken` collection variable.\n\nErrors:\n- 401: wrong email or password\n- 400: missing/invalid body"
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.data && body.data.token) {",
+                  "        pm.collectionVariables.set('adminToken', body.data.token);",
+                  "        pm.collectionVariables.set('authToken', body.data.token);",
+                  "        console.log('Admin token saved to adminToken and authToken');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "description": "Login with an ADMIN user. First use Dev / Make Admin to promote a user.\n\nSaves token to both `adminToken` and `authToken`."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛠️ Dev (dev profile only)",
+      "description": "Development-only endpoints. Only active when spring.profiles.active=dev. NOT available in production.",
+      "item": [
+        {
+          "name": "Make Admin",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/dev/make-admin?email=john.doe@example.com",
+              "host": ["{{baseUrl}}"],
+              "path": ["dev", "make-admin"],
+              "query": [{ "key": "email", "value": "john.doe@example.com", "description": "Email of user to promote to ADMIN" }]
+            },
+            "description": "Promotes a user to ROLE_ADMIN. After this, re-login to get a new JWT that includes the ADMIN role.\n\nFlow: Register → Make Admin → Login (Admin) → use adminToken for admin endpoints."
+          }
+        },
+        {
+          "name": "List All Users",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/dev/users", "host": ["{{baseUrl}}"], "path": ["dev", "users"] },
+            "description": "Returns all users in the database (id, email, roles). Useful for debugging."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📂 Categories",
+      "description": "Product category management.\n- GET: public\n- POST/PUT/DELETE: ADMIN only",
+      "item": [
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] },
+            "description": "Returns all categories (id, name, description, parentId). Public — no auth needed."
+          }
+        },
+        {
+          "name": "Get Category by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] },
+            "description": "Returns a single category by ID. 404 if not found."
+          }
+        },
+        {
+          "name": "Create Category [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electronics\",\n  \"description\": \"Phones, laptops, and gadgets\"\n}"
+            },
+            "description": "Creates a new category. ADMIN only.\n\nNote: `name` must be unique. Duplicate name → 409 Conflict.\n\nOptional: `parentId` (Long) to create a sub-category."
+          }
+        },
+        {
+          "name": "Update Category [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electronics & Gadgets\",\n  \"description\": \"Updated description for electronics\"\n}"
+            },
+            "description": "Updates category name and/or description. ADMIN only. 404 if ID not found."
+          }
+        },
+        {
+          "name": "Delete Category [ADMIN]",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/categories/{{categoryId}}", "host": ["{{baseUrl}}"], "path": ["categories", "{{categoryId}}"] },
+            "description": "Soft-deletes a category. ADMIN only. 404 if not found."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📦 Products",
+      "description": "Product catalog management.\n- GET: public\n- POST/PUT/DELETE: ADMIN only",
+      "item": [
+        {
+          "name": "Get All Products (Paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products?page=0&size=10&sortBy=name",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page",   "value": "0",    "description": "Page number (0-based)" },
+                { "key": "size",   "value": "10",   "description": "Items per page" },
+                { "key": "sortBy", "value": "name", "description": "Sort field: name, price, createdAt" },
+                { "key": "search", "value": "",     "description": "Optional keyword filter", "disabled": true }
+              ]
+            },
+            "description": "Returns paginated product list. Public — no auth needed.\n\nResponse includes: `content[]`, `totalElements`, `totalPages`, `number`, `size`."
+          }
+        },
+        {
+          "name": "Get All Products (with search)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products?page=0&size=10&search=phone",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page",   "value": "0" },
+                { "key": "size",   "value": "10" },
+                { "key": "search", "value": "phone", "description": "Searches product name and description" }
+              ]
+            },
+            "description": "Filters products by keyword in name/description. Public."
+          }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] },
+            "description": "Returns a single product. 404 if not found or soft-deleted."
+          }
+        },
+        {
+          "name": "Get Products by Category",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/category/{{categoryId}}?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "category", "{{categoryId}}"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Paginated list of products in a specific category. Public."
+          }
+        },
+        {
+          "name": "Create Product [ADMIN]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.data && body.data.id) {",
+                  "        pm.collectionVariables.set('productId', body.data.id);",
+                  "        console.log('productId set to:', body.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPhone 15 Pro\",\n  \"description\": \"Apple flagship smartphone with A17 Pro chip\",\n  \"price\": 99999.00,\n  \"stockQuantity\": 50,\n  \"categoryId\": 1,\n  \"imageUrl\": \"https://example.com/images/iphone15pro.jpg\"\n}"
+            },
+            "description": "Creates a new product. ADMIN only. Returns 201 with created product.\n\nAuto-saves returned `id` to `productId` variable.\n\nValidation:\n- name: required, max 255 chars\n- price: required, must be > 0\n- stockQuantity: required, >= 0\n- categoryId: required, must exist"
+          }
+        },
+        {
+          "name": "Update Product [ADMIN]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"iPhone 15 Pro Max\",\n  \"description\": \"Updated: larger screen variant\",\n  \"price\": 129999.00,\n  \"stockQuantity\": 30,\n  \"categoryId\": 1,\n  \"imageUrl\": \"https://example.com/images/iphone15promax.jpg\"\n}"
+            },
+            "description": "Full update of a product. All fields required. ADMIN only.\n\n404 if product not found."
+          }
+        },
+        {
+          "name": "Delete Product [ADMIN]",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/products/{{productId}}", "host": ["{{baseUrl}}"], "path": ["products", "{{productId}}"] },
+            "description": "Soft-deletes a product (sets active=false). ADMIN only.\n\nSoft delete preserves historical order data that references this product."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔍 Search",
+      "description": "Advanced product search with multi-field filtering.",
+      "item": [
+        {
+          "name": "Search Products",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/search/products?q=phone&page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["search", "products"],
+              "query": [
+                { "key": "q",          "value": "phone",  "description": "Keyword — searches name and description" },
+                { "key": "minPrice",   "value": "",       "description": "Minimum price (inclusive)", "disabled": true },
+                { "key": "maxPrice",   "value": "",       "description": "Maximum price (inclusive)", "disabled": true },
+                { "key": "categoryId", "value": "",       "description": "Filter by category ID",    "disabled": true },
+                { "key": "page",       "value": "0" },
+                { "key": "size",       "value": "10" },
+                { "key": "sort",       "value": "name",   "description": "Sort by: name, price, createdAt" }
+              ]
+            },
+            "description": "Multi-filter product search. All params optional — combine freely.\n\nExamples:\n- `?q=laptop&minPrice=50000&maxPrice=150000`\n- `?categoryId=1&sort=price`\n- `?q=samsung&categoryId=2&page=1&size=5`"
+          }
+        },
+        {
+          "name": "Search by Price Range",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/search/products?minPrice=1000&maxPrice=50000&page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["search", "products"],
+              "query": [
+                { "key": "minPrice", "value": "1000" },
+                { "key": "maxPrice", "value": "50000" },
+                { "key": "page",     "value": "0" },
+                { "key": "size",     "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search by Category + Keyword",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/search/products?q=samsung&categoryId={{categoryId}}&page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["search", "products"],
+              "query": [
+                { "key": "q",          "value": "samsung" },
+                { "key": "categoryId", "value": "{{categoryId}}" },
+                { "key": "page",       "value": "0" },
+                { "key": "size",       "value": "10" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🛒 Cart",
+      "description": "Shopping cart management. All endpoints require USER auth (JWT token).",
+      "item": [
+        {
+          "name": "Get Cart",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] },
+            "description": "Returns the current user's cart with all items, quantities, and subtotals.\n\nCart is auto-created on first access (lazy creation pattern)."
+          }
+        },
+        {
+          "name": "Add Item to Cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.data && body.data.items && body.data.items.length > 0) {",
+                  "        const lastItem = body.data.items[body.data.items.length - 1];",
+                  "        pm.collectionVariables.set('cartItemId', lastItem.cartItemId);",
+                  "        console.log('cartItemId set to:', lastItem.cartItemId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/cart/items", "host": ["{{baseUrl}}"], "path": ["cart", "items"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 2\n}"
+            },
+            "description": "Adds a product to cart or increments quantity if already present (idempotent add).\n\nReturns updated full cart.\n\nValidation:\n- productId: required, must exist\n- quantity: required, >= 1\n\nAuto-saves last item's `cartItemId`."
+          }
+        },
+        {
+          "name": "Update Cart Item Quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/cart/items/{{cartItemId}}?quantity=3",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "items", "{{cartItemId}}"],
+              "query": [{ "key": "quantity", "value": "3", "description": "New quantity (replaces current)" }]
+            },
+            "description": "Sets the quantity of a specific cart item. Does NOT add — replaces.\n\n404 if cartItemId doesn't belong to this user's cart."
+          }
+        },
+        {
+          "name": "Remove Cart Item",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/cart/items/{{cartItemId}}", "host": ["{{baseUrl}}"], "path": ["cart", "items", "{{cartItemId}}"] },
+            "description": "Removes a single item from cart. Returns updated cart."
+          }
+        },
+        {
+          "name": "Clear Cart",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] },
+            "description": "Removes ALL items from the cart. Cart itself is kept (not deleted)."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📋 Orders",
+      "description": "Order lifecycle management.\n- Place/view/cancel: USER auth\n- Status update: ADMIN only",
+      "item": [
+        {
+          "name": "Place Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    if (body.data && body.data.orderId) {",
+                  "        pm.collectionVariables.set('orderId', body.data.orderId);",
+                  "        console.log('orderId set to:', body.data.orderId);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddressId\": null\n}"
+            },
+            "description": "Places an order from the current user's cart. Cart must not be empty.\n\n`shippingAddressId`: null = use default address. Provide an ID to use a specific address.\n\nWhat happens:\n1. Validates stock for each cart item\n2. Calculates total using current prices (snapshot)\n3. Deducts stock from each product\n4. Creates Order with status=PENDING\n5. Clears the cart\n6. Sends order confirmation email\n\nAuto-saves `orderId`."
+          }
+        },
+        {
+          "name": "Get My Orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/orders?page=0&size=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Returns paginated list of orders for the current user. Most recent first."
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/orders/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}"] },
+            "description": "Returns a specific order. Only accessible by the order's owner.\n\n404 if order not found or belongs to another user."
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/cancel", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "cancel"] },
+            "description": "Cancels an order. Only PENDING or CONFIRMED orders can be cancelled.\n\nRestores stock for each cancelled item.\n\n400 if order is PROCESSING, SHIPPED, or DELIVERED."
+          }
+        },
+        {
+          "name": "Update Order Status [ADMIN]",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/orders/{{orderId}}/status", "host": ["{{baseUrl}}"], "path": ["orders", "{{orderId}}", "status"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\"\n}"
+            },
+            "description": "Admin-only status update.\n\nValid status values:\n- PENDING → CONFIRMED → PROCESSING → SHIPPED → DELIVERED\n- Any status → CANCELLED\n\nNo state machine enforcement — any transition is allowed (by design for Phase 6)."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "💳 Payments",
+      "description": "Payment lifecycle simulation. Simulated gateway — no real money moves.",
+      "item": [
+        {
+          "name": "Initiate Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/payments/initiate/{{orderId}}?method=UPI",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "initiate", "{{orderId}}"],
+              "query": [
+                {
+                  "key": "method",
+                  "value": "UPI",
+                  "description": "Payment method: CREDIT_CARD | DEBIT_CARD | UPI | NET_BANKING | WALLET | COD"
+                }
+              ]
+            },
+            "description": "Creates a payment record with status=PENDING and a unique paymentReference UUID.\n\nThis simulates the first step in a real payment gateway flow (redirect to gateway).\n\nPayment methods: CREDIT_CARD, DEBIT_CARD, UPI, NET_BANKING, WALLET, COD"
+          }
+        },
+        {
+          "name": "Confirm Payment (simulate success)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/payments/confirm/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["payments", "confirm", "{{orderId}}"] },
+            "description": "Simulates a successful payment callback from the gateway.\n\nWhat happens:\n- Payment status → COMPLETED\n- Order status → CONFIRMED\n\nIn a real system this would be a webhook from Stripe/Razorpay."
+          }
+        },
+        {
+          "name": "Fail Payment (simulate failure)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/payments/fail/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["payments", "fail", "{{orderId}}"] },
+            "description": "Simulates a failed payment (e.g., card declined).\n\nWhat happens:\n- Payment status → FAILED\n- Order status stays PENDING (user can retry)"
+          }
+        },
+        {
+          "name": "Get Payment for Order",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/payments/order/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["payments", "order", "{{orderId}}"] },
+            "description": "Returns payment details for an order including paymentReference and status."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📤 File Upload",
+      "description": "Image upload endpoints. ADMIN only. Uses multipart/form-data.",
+      "item": [
+        {
+          "name": "Upload Image (generic)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/upload/image", "host": ["{{baseUrl}}"], "path": ["upload", "image"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Image file (JPEG, PNG, GIF, WebP). Max 5MB."
+                }
+              ]
+            },
+            "description": "Uploads an image to the server's upload directory. Returns the file URL.\n\nRestrictions:\n- Allowed MIME types: image/jpeg, image/png, image/gif, image/webp\n- Max size: 5MB (configurable)\n- File renamed to UUID to prevent collisions\n\nReturns: `{ data: { fileName, url, size } }`"
+          }
+        },
+        {
+          "name": "Upload Product Image [ADMIN]",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/upload/product/{{productId}}/image", "host": ["{{baseUrl}}"], "path": ["upload", "product", "{{productId}}", "image"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Image file to attach to this product"
+                }
+              ]
+            },
+            "description": "Uploads an image and immediately sets it as the product's `imageUrl`.\n\n404 if product not found."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🔧 Admin Dashboard",
+      "description": "Admin analytics and order management. ALL endpoints require ADMIN role.",
+      "item": [
+        {
+          "name": "Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/dashboard", "host": ["{{baseUrl}}"], "path": ["admin", "dashboard"] },
+            "description": "Returns business snapshot:\n- Total revenue\n- Order counts by status (PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED)\n- Total products\n- Total users\n\nUseful for admin home page widget."
+          }
+        },
+        {
+          "name": "Revenue Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/revenue?from=2026-01-01T00:00:00&to=2026-12-31T23:59:59",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "revenue"],
+              "query": [
+                { "key": "from", "value": "2026-01-01T00:00:00", "description": "Start datetime (ISO 8601)" },
+                { "key": "to",   "value": "2026-12-31T23:59:59", "description": "End datetime (ISO 8601)" }
+              ]
+            },
+            "description": "Revenue aggregated over a date range.\n\nReturns: total revenue, order count, average order value for the given period.\n\nDatetime format: `yyyy-MM-ddTHH:mm:ss` (ISO 8601)"
+          }
+        },
+        {
+          "name": "Revenue Report (last 30 days)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/revenue?from=2026-05-29T00:00:00&to=2026-06-29T23:59:59",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "revenue"],
+              "query": [
+                { "key": "from", "value": "2026-05-29T00:00:00" },
+                { "key": "to",   "value": "2026-06-29T23:59:59" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Top Customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/top-customers?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "top-customers"],
+              "query": [{ "key": "limit", "value": "10", "description": "Number of top customers to return" }]
+            },
+            "description": "Returns top N customers by total spend.\n\nEach entry: userId, email, orderCount, totalSpent."
+          }
+        },
+        {
+          "name": "Get All Orders (filtered)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/orders?page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "orders"],
+              "query": [
+                { "key": "status", "value": "",                    "description": "Filter: PENDING|CONFIRMED|PROCESSING|SHIPPED|DELIVERED|CANCELLED", "disabled": true },
+                { "key": "from",   "value": "2026-01-01T00:00:00", "description": "Filter from datetime", "disabled": true },
+                { "key": "to",     "value": "2026-12-31T23:59:59", "description": "Filter to datetime",   "disabled": true },
+                { "key": "page",   "value": "0" },
+                { "key": "size",   "value": "20" }
+              ]
+            },
+            "description": "Admin view of all orders across all users. Paginated and filterable.\n\nAll query params are optional — combine freely:\n- `?status=PENDING` → only pending orders\n- `?from=2026-06-01T00:00:00&to=2026-06-30T23:59:59` → orders this month\n- `?status=SHIPPED&page=1&size=10` → second page of shipped orders"
+          }
+        },
+        {
+          "name": "Get All Orders (PENDING only)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/orders?status=PENDING&page=0&size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "orders"],
+              "query": [
+                { "key": "status", "value": "PENDING" },
+                { "key": "page",   "value": "0" },
+                { "key": "size",   "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Order Status [ADMIN]",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{authToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/status", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "status"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\"\n}"
+            },
+            "description": "Admin endpoint to update any order's status.\n\nStatus flow: PENDING → CONFIRMED → PROCESSING → SHIPPED → DELIVERED\n\nValid values: PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📊 Actuator (Observability)",
+      "description": "Spring Boot Actuator endpoints for monitoring. Exposed in all profiles.",
+      "item": [
+        {
+          "name": "Actuator Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/actuator/health", "host": ["{{baseUrl}}"], "path": ["actuator", "health"] },
+            "description": "Spring Boot health check. Returns:\n- `status`: UP / DOWN\n- Component details (DB, Redis, disk) when authorized\n\nAutomatically checked by Docker HEALTHCHECK and Kubernetes liveness probe."
+          }
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/actuator/prometheus", "host": ["{{baseUrl}}"], "path": ["actuator", "prometheus"] },
+            "description": "Prometheus-format metrics scrape endpoint.\n\nPrometheus scrapes this every 15s (configured in prometheus.yml).\n\nIncludes:\n- JVM metrics (heap, GC, threads)\n- HTTP request metrics (latency, count by status)\n- Custom business metrics (orders placed, registrations, active carts)\n- HikariCP connection pool metrics"
+          }
+        },
+        {
+          "name": "All Metrics",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/actuator/metrics", "host": ["{{baseUrl}}"], "path": ["actuator", "metrics"] },
+            "description": "Lists all available metric names. Access individual metric at `/actuator/metrics/{metric.name}`."
+          }
+        },
+        {
+          "name": "Specific Metric — HTTP requests",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/actuator/metrics/http.server.requests", "host": ["{{baseUrl}}"], "path": ["actuator", "metrics", "http.server.requests"] },
+            "description": "Returns detailed stats for HTTP server requests:\n- count, total time, max time\n- Tags: uri, method, status, outcome"
+          }
+        },
+        {
+          "name": "Specific Metric — JVM Heap",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/actuator/metrics/jvm.memory.used", "host": ["{{baseUrl}}"], "path": ["actuator", "metrics", "jvm.memory.used"] }
+          }
+        },
+        {
+          "name": "Loggers (runtime log level)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/actuator/loggers", "host": ["{{baseUrl}}"], "path": ["actuator", "loggers"] },
+            "description": "Lists all loggers and their current levels.\n\nTo change a logger level at runtime (no restart needed):\n- POST /actuator/loggers/com.ecommerce\n- Body: { \"configuredLevel\": \"DEBUG\" }"
+          }
+        },
+        {
+          "name": "Set Log Level at Runtime [POST]",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/actuator/loggers/com.ecommerce", "host": ["{{baseUrl}}"], "path": ["actuator", "loggers", "com.ecommerce"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"configuredLevel\": \"DEBUG\"\n}"
+            },
+            "description": "Changes log level for the com.ecommerce package at runtime — no restart required.\n\nUseful for debugging in production without redeployment.\n\nLevels: TRACE, DEBUG, INFO, WARN, ERROR, OFF\n\nTo reset: set configuredLevel to null."
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "🧪 Test Scenarios (E2E flows)",
+      "description": "Pre-built end-to-end flows. Run these in order to test the full purchase cycle.",
+      "item": [
+        {
+          "name": "FLOW 1 — Full Purchase (run in order)",
+          "item": [
+            {
+              "name": "Step 1 — Register User",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const token = pm.response.json().data.token;",
+                      "    pm.collectionVariables.set('authToken', token);",
+                      "    console.log('✅ Registered and token saved');",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"email\": \"testflow@example.com\",\n  \"password\": \"password123\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Step 2 — Make Admin (dev only)",
+              "request": {
+                "method": "POST",
+                "url": {
+                  "raw": "{{baseUrl}}/dev/make-admin?email=testflow@example.com",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["dev", "make-admin"],
+                  "query": [{ "key": "email", "value": "testflow@example.com" }]
+                }
+              }
+            },
+            {
+              "name": "Step 3 — Login as Admin",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const token = pm.response.json().data.token;",
+                      "    pm.collectionVariables.set('authToken', token);",
+                      "    pm.collectionVariables.set('adminToken', token);",
+                      "    console.log('✅ Admin token saved');",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"testflow@example.com\",\n  \"password\": \"password123\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Step 4 — Create Category",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const id = pm.response.json().data.id;",
+                      "    pm.collectionVariables.set('categoryId', id);",
+                      "    console.log('✅ categoryId set to', id);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{authToken}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/categories", "host": ["{{baseUrl}}"], "path": ["categories"] },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Test Category\",\n  \"description\": \"E2E test category\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Step 5 — Create Product",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const id = pm.response.json().data.id;",
+                      "    pm.collectionVariables.set('productId', id);",
+                      "    console.log('✅ productId set to', id);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{authToken}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Test Product\",\n  \"description\": \"E2E test product\",\n  \"price\": 999.00,\n  \"stockQuantity\": 100,\n  \"categoryId\": {{categoryId}}\n}"
+                }
+              }
+            },
+            {
+              "name": "Step 6 — Add to Cart",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 200) {",
+                      "    const items = pm.response.json().data.items;",
+                      "    if (items && items.length > 0) {",
+                      "        pm.collectionVariables.set('cartItemId', items[0].cartItemId);",
+                      "        console.log('✅ cartItemId set to', items[0].cartItemId);",
+                      "    }",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{authToken}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/cart/items", "host": ["{{baseUrl}}"], "path": ["cart", "items"] },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 2\n}"
+                }
+              }
+            },
+            {
+              "name": "Step 7 — Place Order",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    const id = pm.response.json().data.orderId;",
+                      "    pm.collectionVariables.set('orderId', id);",
+                      "    console.log('✅ orderId set to', id);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{authToken}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] },
+                "body": { "mode": "raw", "raw": "{\n  \"shippingAddressId\": null\n}" }
+              }
+            },
+            {
+              "name": "Step 8 — Initiate Payment",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+                "url": {
+                  "raw": "{{baseUrl}}/payments/initiate/{{orderId}}?method=UPI",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["payments", "initiate", "{{orderId}}"],
+                  "query": [{ "key": "method", "value": "UPI" }]
+                }
+              }
+            },
+            {
+              "name": "Step 9 — Confirm Payment",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{authToken}}" }],
+                "url": { "raw": "{{baseUrl}}/payments/confirm/{{orderId}}", "host": ["{{baseUrl}}"], "path": ["payments", "confirm", "{{orderId}}"] }
+              }
+            },
+            {
+              "name": "Step 10 — Ship Order (Admin)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+                ],
+                "url": { "raw": "{{baseUrl}}/admin/orders/{{orderId}}/status", "host": ["{{baseUrl}}"], "path": ["admin", "orders", "{{orderId}}", "status"] },
+                "body": { "mode": "raw", "raw": "{\n  \"status\": \"SHIPPED\"\n}" }
+              }
+            }
+          ]
+        }
+      ]
+    }
+
+  ]
+}
