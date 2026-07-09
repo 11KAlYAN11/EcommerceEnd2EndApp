@@ -79,6 +79,10 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
             .authorizeHttpRequests(auth -> auth
+                    // OPTIONS preflight: browser sends this BEFORE every cross-origin POST/PUT/DELETE
+                    // with an Authorization header. Must be permitted without JWT or preflight fails
+                    // and the real request never goes through.
+                    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                     .requestMatchers(PUBLIC_URLS).permitAll()
                     // Anyone can browse products, categories, search, and uploaded images
                     .requestMatchers(HttpMethod.GET, "/products/**", "/categories/**", "/search/**", "/files/**").permitAll()
@@ -116,14 +120,19 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        if ("*".equals(allowedOrigins)) {
-            config.setAllowedOriginPatterns(List.of("*"));
-        } else {
-            config.setAllowedOrigins(List.of(allowedOrigins.split(",")));
-        }
+
+        // Use allowedOriginPatterns (supports wildcards) + allowCredentials=true.
+        // allowedOrigins("*") + allowCredentials=true is INVALID — browser rejects it.
+        // allowedOriginPatterns("*") + allowCredentials=true IS valid.
+        // In prod, ALLOWED_ORIGINS env var contains actual domains, not "*".
+        List<String> origins = List.of(allowedOrigins.split(","));
+        config.setAllowedOriginPatterns(origins);
+
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id"));
+        config.setExposedHeaders(List.of("X-Correlation-Id"));  // let frontend read this header
         config.setAllowCredentials(true);
+        config.setMaxAge(3600L); // cache preflight for 1 hour — avoids preflight on every request
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

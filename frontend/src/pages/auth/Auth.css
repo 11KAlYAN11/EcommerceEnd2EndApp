@@ -1,0 +1,39 @@
+.auth-page {
+  min-height: calc(100vh - 60px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background: var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.auth-subtitle {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* Side-by-side first/last name fields */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
