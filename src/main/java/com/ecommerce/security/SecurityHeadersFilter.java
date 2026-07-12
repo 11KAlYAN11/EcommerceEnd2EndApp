@@ -100,6 +100,9 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
                                     FilterChain chain)
             throws ServletException, IOException {
 
+        String path = request.getRequestURI();
+        boolean isSwagger = path.contains("/swagger-ui") || path.contains("/v3/api-docs");
+
         // Prevent MIME sniffing
         response.setHeader("X-Content-Type-Options", "nosniff");
 
@@ -116,13 +119,22 @@ public class SecurityHeadersFilter extends OncePerRequestFilter {
         // Referrer policy — don't leak URL params to third parties
         response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
 
-        // CSP — for REST API: block everything (no HTML rendering from this server)
-        // Frontend apps should set their own CSP that allows their CDN/domains
-        response.setHeader("Content-Security-Policy",
-                "default-src 'none'; frame-ancestors 'none'");
+        // CSP — Swagger UI needs inline scripts/styles and self-hosted assets.
+        // All other API paths keep the strict "block everything" policy.
+        if (isSwagger) {
+            response.setHeader("Content-Security-Policy",
+                    "default-src 'self'; " +
+                    "script-src 'self' 'unsafe-inline'; " +
+                    "style-src 'self' 'unsafe-inline'; " +
+                    "img-src 'self' data:; " +
+                    "font-src 'self' data:; " +
+                    "connect-src 'self'");
+        } else {
+            response.setHeader("Content-Security-Policy",
+                    "default-src 'none'; frame-ancestors 'none'");
+        }
 
         // Explicitly disable client-side caching for API responses
-        // API data changes — stale caches cause bugs (showing old cart, old prices)
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
         response.setHeader("Pragma", "no-cache");
 

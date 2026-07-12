@@ -27,6 +27,8 @@
 .nav-active { color: var(--text) !important; background: var(--bg-hover) !important; }
 .admin-link { color: var(--warning) !important; }
 .admin-link:hover { color: #fde68a !important; }
+.nav-swagger { color: #38bdf8 !important; font-size: 0.82rem !important; }
+.nav-swagger:hover { color: #7dd3fc !important; }
 
 .cart-link { position: relative; }
 .cart-badge {

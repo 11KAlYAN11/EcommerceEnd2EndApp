@@ -27,6 +27,16 @@ export default function Navbar() {
             Products
           </Link>
 
+          <a
+            href="http://localhost:8080/api/swagger-ui.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="nav-swagger"
+            title="Open Swagger API Docs"
+          >
+            📋 API Docs
+          </a>
+
           {user ? (
             <>
               <Link to="/cart" className={`cart-link ${isActive('/cart') ? 'nav-active' : ''}`}>

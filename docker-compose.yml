@@ -1,43 +1,37 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# Phase 15 — Docker Compose
+# ShopEase — Full Stack Docker Compose
 #
-# WHY DOCKER COMPOSE?
-#   Our app needs 3 things running: app server + PostgreSQL + Redis
-#   Without Compose: start each manually in correct order, configure each,
-#   remember ports, manage networks — tedious and error-prone.
-#   With Compose: one command (docker compose up) starts everything,
-#   in the right order, on the right network. One file, reproducible setup.
+# Services:
+#   postgres    → primary database         http://localhost:5432
+#   redis       → cache layer              http://localhost:6379
+#   app         → Spring Boot API          http://localhost:8080
+#   prometheus  → metrics collector        http://localhost:9090
+#   grafana     → metrics dashboard        http://localhost:3001  (admin/admin)
 #
 # USAGE:
-#   Development:
-#     docker compose up postgres redis      # start only DB + Redis (run app in IDE)
-#     docker compose up                     # start everything including the app
+#   # Start everything (first time — builds the app image):
+#   docker compose up --build
 #
-#   Build and start fresh:
-#     docker compose up --build             # rebuild app image before starting
+#   # Start only infra (DB + Redis), run app in IDE:
+#   docker compose up postgres redis
 #
-#   Stop everything:
-#     docker compose down                   # stops and removes containers
-#     docker compose down -v                # also deletes volumes (wipes DB data!)
+#   # Start infra + observability (no app rebuild needed):
+#   docker compose up postgres redis prometheus grafana
 #
-# NETWORKS:
-#   All services are on the same Docker network (ecommerce-network).
-#   Services talk to each other by service name:
-#     App connects to postgres:5432 (not localhost:5432)
-#     App connects to redis:6379
-#   "postgres" resolves to the PostgreSQL container's IP automatically.
+#   # Stop and remove containers (keeps volumes):
+#   docker compose down
 #
-# VOLUMES:
-#   postgres-data: persists DB data between container restarts
-#   Without volume: every "docker compose down" wipes the database
+#   # Stop AND wipe all data (fresh start):
+#   docker compose down -v
 #
-# ENVIRONMENT VARIABLES:
-#   NEVER commit real passwords to docker-compose.yml
-#   Use a .env file (gitignored): docker compose reads it automatically
-#   Create .env in the same directory:
-#     DB_PASSWORD=your-real-password
-#     JWT_SECRET=your-64-char-random-secret
-#     MAIL_PASSWORD=your-app-password
+#   # View logs of one service:
+#   docker compose logs -f app
+#   docker compose logs -f prometheus
+#
+# SECRETS:
+#   Copy .env.example → .env and fill real values.
+#   docker compose reads .env automatically.
+#   Never commit .env to git.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 version: '3.9'
@@ -53,9 +47,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-root}
     ports:
-      - "5432:5432"        # host:container — expose to localhost for tools like pgAdmin
+      - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data   # persist across restarts
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - ecommerce-network
     healthcheck:
@@ -72,10 +66,6 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    # maxmemory-policy allkeys-lru:
-    #   When Redis is full, evict the Least Recently Used keys.
-    #   This is ideal for caching: stale/old cache entries are removed first.
-    #   Without this: Redis returns errors when full (bad for a cache).
     networks:
       - ecommerce-network
     healthcheck:
@@ -100,27 +90,75 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET:-ecommerce-super-secret-key-change-in-production-must-be-at-least-256-bits}
-      MAIL_USERNAME: ${MAIL_USERNAME:-programmer143143@gmail.com}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-your-app-password}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
       UPLOAD_DIR: /app/uploads
     volumes:
-      - uploads-data:/app/uploads   # persist uploaded images
+      - uploads-data:/app/uploads
     depends_on:
       postgres:
-        condition: service_healthy  # wait for postgres to be truly ready
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
       - ecommerce-network
-    restart: unless-stopped         # auto-restart on crash (not on manual stop)
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
              "http://localhost:8080/api/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s             # give JVM time to start up before checking
+      start_period: 60s
+
+  # ── Prometheus ──────────────────────────────────────────────────────────────
+  # Pulls metrics from Spring Boot /actuator/prometheus every 15s
+  # and stores them as time-series data
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ecommerce-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      # our scrape config telling Prometheus where to find the app
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # persist collected metrics across restarts
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'   # keep 7 days of metrics
+      - '--web.enable-lifecycle'              # allows hot config reload via POST /-/reload
+    networks:
+      - ecommerce-network
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  # ── Grafana ─────────────────────────────────────────────────────────────────
+  # Reads from Prometheus and renders dashboards
+  # Login: admin / admin  (change on first login)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecommerce-grafana
+    ports:
+      - "3001:3000"          # 3000 conflicts with React dev server, map to 3001
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3001
+      # Auto-provision datasource + dashboard so you don't click through UI
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - ecommerce-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
 
 # ── Named Volumes ──────────────────────────────────────────────────────────────
 volumes:
@@ -128,9 +166,12 @@ volumes:
     driver: local
   uploads-data:
     driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
 
 # ── Network ────────────────────────────────────────────────────────────────────
 networks:
   ecommerce-network:
     driver: bridge
-    # bridge network: services can reach each other by name, isolated from host

@@ -1,0 +1,13 @@
+# Auto-provision Prometheus as Grafana datasource.
+# Without this file you'd have to click through Grafana UI every time
+# the container is recreated. This makes it reproducible.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090     # "prometheus" = docker service name
+    isDefault: true
+    editable: false
