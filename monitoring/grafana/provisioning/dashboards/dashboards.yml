@@ -1,0 +1,12 @@
+# Tells Grafana where to find dashboard JSON files to auto-load.
+# Drop any .json dashboard file in the dashboards/ folder and it appears automatically.
+
+apiVersion: 1
+
+providers:
+  - name: ShopEase Dashboards
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

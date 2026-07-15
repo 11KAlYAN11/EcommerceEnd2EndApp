@@ -94,6 +94,12 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
       UPLOAD_DIR: /app/uploads
+      # Override prod's ddl-auto=validate → update so Docker's fresh empty DB gets tables created.
+      # validate would fail on a brand-new container that has never had tables.
+      # In a real prod deploy you'd use Flyway migrations instead of this.
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      # Disable mail health check — no real Gmail credentials in Docker dev
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
     volumes:
       - uploads-data:/app/uploads
     depends_on:

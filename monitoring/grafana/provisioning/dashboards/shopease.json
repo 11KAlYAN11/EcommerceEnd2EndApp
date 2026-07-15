@@ -1,0 +1,89 @@
+{
+  "title": "ShopEase — API Overview",
+  "uid": "shopease-overview",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "HTTP Requests / sec",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "rate(http_server_requests_seconds_count[1m])", "legendFormat": "req/s", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 50 }, { "color": "red", "value": 100 }] } } }
+    },
+    {
+      "id": 2, "type": "stat", "title": "Avg Response Time (ms)",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "rate(http_server_requests_seconds_sum[1m]) / rate(http_server_requests_seconds_count[1m]) * 1000", "legendFormat": "ms", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 200 }, { "color": "red", "value": 500 }] } } }
+    },
+    {
+      "id": 3, "type": "stat", "title": "JVM Heap Used (MB)",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024", "legendFormat": "MB", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "decmbytes", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 400 }, { "color": "red", "value": 700 }] } } }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Active DB Connections",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "hikaricp_connections_active", "legendFormat": "active", "datasource": "Prometheus" }],
+      "options": { "colorMode": "background" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 8 }, { "color": "red", "value": 15 }] } } }
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "HTTP Requests by Endpoint",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(http_server_requests_seconds_count[1m])", "legendFormat": "{{method}} {{uri}}", "datasource": "Prometheus" }],
+      "options": { "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "HTTP Error Rate (4xx / 5xx)",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "rate(http_server_requests_seconds_count{status=~\"4..\"}[1m])", "legendFormat": "4xx errors", "datasource": "Prometheus" },
+        { "expr": "rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])", "legendFormat": "5xx errors", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "JVM Memory — Heap vs Non-Heap",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024", "legendFormat": "Heap Used (MB)", "datasource": "Prometheus" },
+        { "expr": "jvm_memory_max_bytes{area=\"heap\"} / 1024 / 1024", "legendFormat": "Heap Max (MB)", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "decmbytes" } }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "HikariCP Connection Pool",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "hikaricp_connections_active", "legendFormat": "Active", "datasource": "Prometheus" },
+        { "expr": "hikaricp_connections_idle", "legendFormat": "Idle", "datasource": "Prometheus" },
+        { "expr": "hikaricp_connections_pending", "legendFormat": "Pending", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 9, "type": "timeseries", "title": "JVM Threads",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "jvm_threads_live_threads", "legendFormat": "Live", "datasource": "Prometheus" },
+        { "expr": "jvm_threads_daemon_threads", "legendFormat": "Daemon", "datasource": "Prometheus" },
+        { "expr": "jvm_threads_peak_threads", "legendFormat": "Peak", "datasource": "Prometheus" }
+      ]
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "Response Time Percentiles (p50 / p95 / p99)",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(http_server_requests_seconds_bucket[5m])) * 1000", "legendFormat": "p50 (ms)", "datasource": "Prometheus" },
+        { "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m])) * 1000", "legendFormat": "p95 (ms)", "datasource": "Prometheus" },
+        { "expr": "histogram_quantile(0.99, rate(http_server_requests_seconds_bucket[5m])) * 1000", "legendFormat": "p99 (ms)", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    }
+  ]
+}
