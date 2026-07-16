@@ -1,5 +1,5 @@
 # ShopEase — End-to-End E-Commerce Platform
-
+//
 A production-grade e-commerce application built from scratch across **15 backend phases** and **8 frontend phases**, covering real-world engineering patterns from JWT auth to Redis caching, observability, production hardening, and a full React SPA.
 
 ---
