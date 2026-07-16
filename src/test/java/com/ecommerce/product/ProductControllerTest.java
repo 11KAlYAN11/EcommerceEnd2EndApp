@@ -2,16 +2,23 @@ package com.ecommerce.product;
 
 import com.ecommerce.common.exception.ResourceNotFoundException;
 import com.ecommerce.common.util.JwtUtil;
+import com.ecommerce.config.JwtAuthFilter;
+import com.ecommerce.config.SecurityConfig;
+import com.ecommerce.observability.MetricsService;
 import com.ecommerce.product.dto.ProductResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -49,13 +56,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   $.data.content[0] → first element of the page's content list
  */
 @WebMvcTest(ProductController.class)
+@Import({SecurityConfig.class, JwtAuthFilter.class})
+@ActiveProfiles("test")
+@TestPropertySource(properties = "cors.allowed-origins=http://localhost:3000")
 class ProductControllerTest {
 
     @Autowired MockMvc mockMvc;
 
-    @MockBean ProductService     productService;
-    @MockBean JwtUtil            jwtUtil;
-    @MockBean UserDetailsService userDetailsService;
+    @MockBean ProductService              productService;
+    @MockBean JwtUtil                     jwtUtil;
+    @MockBean UserDetailsService          userDetailsService;
+    @MockBean MetricsService              metricsService;
+    @MockBean JpaMetamodelMappingContext  jpaMetamodelMappingContext;
 
     // ── GET /products (public endpoint) ──────────────────────────────────────
 

@@ -6,6 +6,7 @@ import com.ecommerce.auth.dto.RegisterRequest;
 import com.ecommerce.common.exception.ConflictException;
 import com.ecommerce.common.util.JwtUtil;
 import com.ecommerce.notification.EmailService;
+import com.ecommerce.observability.MetricsService;
 import com.ecommerce.user.Role;
 import com.ecommerce.user.RoleRepository;
 import com.ecommerce.user.User;
@@ -76,6 +77,7 @@ class AuthServiceTest {
     @Mock UserDetailsService    userDetailsService;
     @Mock JwtUtil               jwtUtil;
     @Mock EmailService          emailService;
+    @Mock MetricsService        metricsService;
 
     // ── Real service with mocks injected ─────────────────────────────────────
     @InjectMocks

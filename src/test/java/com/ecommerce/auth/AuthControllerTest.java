@@ -5,7 +5,14 @@ import com.ecommerce.auth.dto.LoginRequest;
 import com.ecommerce.auth.dto.RegisterRequest;
 import com.ecommerce.common.exception.ConflictException;
 import com.ecommerce.common.util.JwtUtil;
+import com.ecommerce.observability.MetricsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
+import com.ecommerce.config.JwtAuthFilter;
+import com.ecommerce.config.SecurityConfig;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +65,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   "$.success" = root > "success" boolean
  */
 @WebMvcTest(AuthController.class)
+@Import({SecurityConfig.class, JwtAuthFilter.class})
+@ActiveProfiles("test")
+@TestPropertySource(properties = "cors.allowed-origins=http://localhost:3000")
 class AuthControllerTest {
 
     @Autowired MockMvc     mockMvc;
@@ -67,8 +77,14 @@ class AuthControllerTest {
     @MockBean AuthService authService;
 
     // Security infrastructure — @WebMvcTest loads SecurityConfig which needs these
-    @MockBean JwtUtil           jwtUtil;
+    @MockBean JwtUtil            jwtUtil;
     @MockBean UserDetailsService userDetailsService;
+
+    // MetricsService uses Micrometer counters not available in web slice
+    @MockBean MetricsService metricsService;
+
+    // @EnableJpaAuditing on main class triggers JPA metamodel check in web slice — mock it
+    @MockBean JpaMetamodelMappingContext jpaMetamodelMappingContext;
 
     // ── POST /auth/register ───────────────────────────────────────────────────
 

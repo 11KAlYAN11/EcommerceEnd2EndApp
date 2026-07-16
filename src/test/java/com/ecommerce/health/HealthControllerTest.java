@@ -1,11 +1,20 @@
 package com.ecommerce.health;
 
 import com.ecommerce.common.response.ApiResponse;
+import com.ecommerce.common.util.JwtUtil;
+import com.ecommerce.config.JwtAuthFilter;
+import com.ecommerce.config.SecurityConfig;
+import com.ecommerce.observability.MetricsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.when;
@@ -48,11 +57,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   "Assume the service returns THIS — does the controller respond correctly?"
  */
 @WebMvcTest(HealthController.class)
+@Import({SecurityConfig.class, JwtAuthFilter.class})
+@ActiveProfiles("test")
+@TestPropertySource(properties = "cors.allowed-origins=http://localhost:3000")
 class HealthControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
+    @MockBean JwtUtil                    jwtUtil;
+    @MockBean UserDetailsService         userDetailsService;
+    @MockBean MetricsService             metricsService;
+    @MockBean JpaMetamodelMappingContext jpaMetamodelMappingContext;
     @MockBean
     private HealthService healthService;
 
