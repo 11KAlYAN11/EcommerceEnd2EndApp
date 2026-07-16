@@ -1,5 +1,8 @@
 package com.ecommerce.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.CacheManager;
@@ -60,6 +63,17 @@ public class CacheConfig {
     @Value("${cache.ttl.categories:1800}")
     private long categoriesTtl;
 
+    private GenericJackson2JsonRedisSerializer redisSerializer() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        mapper.activateDefaultTyping(
+                mapper.getPolymorphicTypeValidator(),
+                ObjectMapper.DefaultTyping.NON_FINAL
+        );
+        return new GenericJackson2JsonRedisSerializer(mapper);
+    }
+
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         try {
@@ -70,7 +84,7 @@ public class CacheConfig {
                     .serializeKeysWith(RedisSerializationContext.SerializationPair
                             .fromSerializer(new StringRedisSerializer()))
                     .serializeValuesWith(RedisSerializationContext.SerializationPair
-                            .fromSerializer(new GenericJackson2JsonRedisSerializer()))
+                            .fromSerializer(redisSerializer()))
                     .disableCachingNullValues();
 
             Map<String, RedisCacheConfiguration> cacheConfigs = Map.of(
