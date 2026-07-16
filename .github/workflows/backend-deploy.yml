@@ -8,6 +8,16 @@ on:
       - 'pom.xml'
       - 'Dockerfile'
 
+# Versioning scheme: v1.0.<build-number> (+ short git SHA for traceability)
+#   v1.0.42  → human-readable, monotonically increasing, easy rollback
+#   latest   → convenience alias, never used for deploys
+# Deploys always pin the exact version tag. Rollback:
+#   docker run ... asampavan14322/shopease-app:v1.0.41
+
+env:
+  IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/shopease-app
+  VERSION: v1.0.${{ github.run_number }}
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -41,23 +51,34 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/shopease-app:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/shopease-app:${{ github.sha }}
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+            ${{ env.IMAGE }}:latest
 
-      - name: Deploy to EC2
+      - name: Deploy to EC2 (pinned version)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/shopease-app:latest
+            set -e
+            IMAGE=${{ env.IMAGE }}:${{ env.VERSION }}
+            echo "Deploying $IMAGE"
+            docker pull $IMAGE
             docker stop shopease || true
             docker rm shopease || true
             docker run -d \
               --name shopease \
               -p 8080:8080 \
               --restart unless-stopped \
+              --network shopease-net \
               --env-file /home/ec2-user/shopease.env \
-              ${{ secrets.DOCKERHUB_USERNAME }}/shopease-app:latest
-            echo "Deployed at $(date)"
+              $IMAGE
+            # record current + previous version for quick rollback
+            touch /home/ec2-user/.shopease-version
+            cp /home/ec2-user/.shopease-version /home/ec2-user/.shopease-version.prev || true
+            echo "$IMAGE" > /home/ec2-user/.shopease-version
+            # clean up dangling old images (keeps disk in check on t3.micro)
+            docker image prune -af --filter "until=168h" || true
+            echo "Deployed $IMAGE at $(date)"

@@ -84,9 +84,13 @@ public class CacheConfig {
             );
 
             log.info("Redis connected — using RedisCacheManager");
+            // enableStatistics(): required for cache hit/miss metrics.
+            // Without it RedisCache reports no stats and Micrometer's
+            // cache_gets_total{result="hit|miss"} stays empty in Prometheus/Grafana.
             return RedisCacheManager.builder(connectionFactory)
                     .cacheDefaults(defaults)
                     .withInitialCacheConfigurations(cacheConfigs)
+                    .enableStatistics()
                     .build();
 
         } catch (Exception e) {

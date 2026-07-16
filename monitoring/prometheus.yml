@@ -1,41 +1,13 @@
-# ── Prometheus Scrape Configuration ───────────────────────────────────────────
-#
-# HOW THIS WORKS:
-#   Prometheus is a "pull-based" metrics system.
-#   It periodically HTTP-GETs /actuator/prometheus on our app.
-#   The app responds with metrics in Prometheus exposition format (text/plain).
-#   Prometheus stores these as time-series data.
-#   Grafana then queries Prometheus using PromQL to build dashboards.
-#
-# Flow:
-#   Spring Boot app → exposes /api/actuator/prometheus
-#   Prometheus      → scrapes it every 15s → stores in time-series DB
-#   Grafana         → queries Prometheus → renders graphs
-#
-# WHY PULL (not push)?
-#   If the app crashes, Prometheus notices (scrape fails).
-#   Push systems silently stop receiving data — harder to detect failures.
-#   Pull also lets Prometheus control the rate, preventing metric floods.
-# ─────────────────────────────────────────────────────────────────────────────
-
 global:
-  scrape_interval: 15s        # pull metrics every 15 seconds
-  evaluation_interval: 15s    # evaluate alerting rules every 15 seconds
-  scrape_timeout: 10s         # give up on a scrape after 10 seconds
+  scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
-
-  # ── ShopEase Spring Boot App ─────────────────────────────────────────────────
-  - job_name: 'shopease-app'
-    metrics_path: '/api/actuator/prometheus'   # Spring Boot actuator endpoint
+  - job_name: 'shopease'
+    metrics_path: '/api/actuator/prometheus'
     static_configs:
-      - targets: ['app:8080']                  # "app" = service name in docker network
-        labels:
-          service: 'shopease-backend'
-          env: 'docker'
-
-  # ── Prometheus itself ────────────────────────────────────────────────────────
-  # Prometheus exposes its own metrics (scrape duration, sample counts, etc.)
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
+      - targets: ['shopease:8080']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'shopease-app'
