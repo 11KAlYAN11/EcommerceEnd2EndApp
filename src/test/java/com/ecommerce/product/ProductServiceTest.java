@@ -109,7 +109,7 @@ class ProductServiceTest {
 
         assertThat(product.isActive()).isFalse();
         verify(productRepository).save(product); // save is called (update, not delete)
-        verify(productRepository, never()).delete(any()); // physical delete never called
+        verify(productRepository, never()).delete(any(Product.class)); // physical delete never called
         verify(productRepository, never()).deleteById(any());
     }
 
