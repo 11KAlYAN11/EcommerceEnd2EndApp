@@ -11,6 +11,7 @@ import com.ecommerce.user.User;
 import com.ecommerce.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,6 +41,18 @@ public class DataSeeder {
     private final ProductRepository productRepository;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${seed.admin.email:admin@test.com}")
+    private String adminEmail;
+
+    @Value("${seed.admin.password:Admin@123}")
+    private String adminPassword;
+
+    @Value("${seed.admin.firstName:Admin}")
+    private String adminFirstName;
+
+    @Value("${seed.admin.lastName:ShopEase}")
+    private String adminLastName;
+
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void seed() {
@@ -65,16 +78,16 @@ public class DataSeeder {
     // ── Users ─────────────────────────────────────────────────────────────────
 
     private void seedUsers(Role adminRole, Role userRole) {
-        if (!userRepository.existsByEmail("admin@test.com")) {
+        if (!userRepository.existsByEmail(adminEmail)) {
             userRepository.save(User.builder()
-                    .firstName("Admin")
-                    .lastName("ShopEase")
-                    .email("admin@test.com")
-                    .password(passwordEncoder.encode("Admin@123"))
+                    .firstName(adminFirstName)
+                    .lastName(adminLastName)
+                    .email(adminEmail)
+                    .password(passwordEncoder.encode(adminPassword))
                     .phone("9999999999")
                     .roles(Set.of(adminRole))
                     .build());
-            log.info("Seeded admin user: admin@test.com / Admin@123");
+            log.info("Seeded admin user: {}", adminEmail);
         }
 
         if (!userRepository.existsByEmail("user@test.com")) {
@@ -86,7 +99,7 @@ public class DataSeeder {
                     .phone("8888888888")
                     .roles(Set.of(userRole))
                     .build());
-            log.info("Seeded demo user: user@test.com / User@123");
+            log.info("Seeded demo user: user@test.com");
         }
     }
 
