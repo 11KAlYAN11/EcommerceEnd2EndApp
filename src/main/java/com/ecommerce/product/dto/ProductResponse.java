@@ -3,6 +3,7 @@ package com.ecommerce.product.dto;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -17,7 +18,7 @@ import java.time.LocalDateTime;
  */
 @Getter
 @Builder
-public class ProductResponse {
+public class ProductResponse implements Serializable {
     private Long id;
     private String name;
     private String description;
