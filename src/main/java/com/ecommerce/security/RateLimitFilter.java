@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -66,8 +67,15 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private static final int    MAX_REQUESTS   = 100;    // per IP per window
-    private static final long   WINDOW_MS      = 60_000; // 1-minute window
+    /** Kill switch — set RATELIMIT_ENABLED=false to bypass entirely (e.g. load testing). */
+    @Value("${ratelimit.enabled:true}")
+    private boolean rateLimitEnabled;
+
+    @Value("${ratelimit.max-requests:100}")
+    private int maxRequests;          // per IP per window
+
+    @Value("${ratelimit.window-ms:60000}")
+    private long windowMs;            // sliding window size
 
     // IP → timestamps of recent requests (sliding window log)
     // ConcurrentHashMap: thread-safe for concurrent request handling
@@ -81,6 +89,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain)
             throws ServletException, IOException {
+
+        // Kill switch — bypass everything when disabled (load testing etc.)
+        if (!rateLimitEnabled) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         // Skip rate limiting for actuator health checks
         if (request.getRequestURI().startsWith(ACTUATOR_PREFIX)) {
@@ -96,8 +110,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             if (timestamps == null) {
                 timestamps = new ArrayDeque<>();
             }
-            // Slide the window: remove timestamps older than WINDOW_MS
-            while (!timestamps.isEmpty() && now - timestamps.peekFirst() > WINDOW_MS) {
+            // Slide the window: remove timestamps older than the window
+            while (!timestamps.isEmpty() && now - timestamps.peekFirst() > windowMs) {
                 timestamps.pollFirst();
             }
             timestamps.addLast(now);
@@ -106,15 +120,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         int requestCount = requestLog.get(clientIp).size();
 
-        if (requestCount > MAX_REQUESTS) {
+        if (requestCount > maxRequests) {
             log.warn("Rate limit exceeded for IP: {} ({} requests in {}s)",
-                    clientIp, requestCount, WINDOW_MS / 1000);
+                    clientIp, requestCount, windowMs / 1000);
 
             response.setStatus(429); // 429 Too Many Requests
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write(
                     "{\"success\":false,\"message\":\"Too many requests. Limit: "
-                    + MAX_REQUESTS + " per minute per IP.\"}");
+                    + maxRequests + " per minute per IP.\"}");
             return; // DO NOT call chain.doFilter — request is rejected
         }
 
