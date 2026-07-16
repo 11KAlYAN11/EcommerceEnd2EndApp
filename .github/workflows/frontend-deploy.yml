@@ -28,7 +28,7 @@ jobs:
       - name: Build React app
         working-directory: frontend
         env:
-          VITE_API_URL: http://shopease-alb-848970636.ap-south-2.elb.amazonaws.com/api
+          VITE_API_URL: https://dwfxg967pcf7t.cloudfront.net/api
         run: npm run build
 
       - name: Configure AWS credentials
