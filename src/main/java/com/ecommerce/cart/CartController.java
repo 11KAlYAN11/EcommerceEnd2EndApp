@@ -5,6 +5,7 @@ import com.ecommerce.cart.dto.CartResponse;
 import com.ecommerce.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -24,10 +25,16 @@ public class CartController {
 
     private final CartService cartService;
 
+    private ResponseEntity<ApiResponse<CartResponse>> unauthorized() {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("Authentication required"));
+    }
+
     /** GET /api/cart */
     @GetMapping
     public ResponseEntity<ApiResponse<CartResponse>> getCart(
             @AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) return unauthorized();
         return ResponseEntity.ok(ApiResponse.success("Cart fetched",
                 cartService.getCart(userDetails.getUsername())));
     }
@@ -37,6 +44,7 @@ public class CartController {
     public ResponseEntity<ApiResponse<CartResponse>> addItem(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody CartItemRequest request) {
+        if (userDetails == null) return unauthorized();
         return ResponseEntity.ok(ApiResponse.success("Item added to cart",
                 cartService.addItem(userDetails.getUsername(), request)));
     }
@@ -47,6 +55,7 @@ public class CartController {
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long cartItemId,
             @RequestParam int quantity) {
+        if (userDetails == null) return unauthorized();
         return ResponseEntity.ok(ApiResponse.success("Cart updated",
                 cartService.updateItemQuantity(userDetails.getUsername(), cartItemId, quantity)));
     }
@@ -56,6 +65,7 @@ public class CartController {
     public ResponseEntity<ApiResponse<CartResponse>> removeItem(
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long cartItemId) {
+        if (userDetails == null) return unauthorized();
         return ResponseEntity.ok(ApiResponse.success("Item removed",
                 cartService.removeItem(userDetails.getUsername(), cartItemId)));
     }
@@ -64,6 +74,8 @@ public class CartController {
     @DeleteMapping
     public ResponseEntity<ApiResponse<Void>> clearCart(
             @AuthenticationPrincipal UserDetails userDetails) {
+        if (userDetails == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("Authentication required"));
         cartService.clearCart(userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.success("Cart cleared"));
     }

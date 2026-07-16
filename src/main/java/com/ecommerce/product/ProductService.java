@@ -15,6 +15,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -117,13 +118,18 @@ public class ProductService {
     }
 
     // Phase 9 — advanced search with optional filters
+    // Uses JpaSpecificationExecutor to avoid Hibernate 6 null-parameter binding bug in JPQL
     @Transactional(readOnly = true)
     public Page<ProductResponse> searchWithFilters(
             String keyword, BigDecimal minPrice, BigDecimal maxPrice,
             Long categoryId, int page, int size, String sortBy) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy).ascending());
-        return productRepository.searchWithFilters(keyword, minPrice, maxPrice, categoryId, pageable)
-                .map(this::toResponse);
+        Specification<Product> spec = Specification.where(ProductSpec.isActive())
+                .and(ProductSpec.keywordContains(keyword))
+                .and(ProductSpec.priceGte(minPrice))
+                .and(ProductSpec.priceLte(maxPrice))
+                .and(ProductSpec.inCategory(categoryId));
+        return productRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
     private Product findActiveProductById(Long id) {
