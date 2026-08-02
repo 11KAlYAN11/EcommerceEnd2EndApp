@@ -236,3 +236,90 @@ Right now: yes, for anything that doesn't require login (there's nothing else bu
 
 **What's next?**
 Phase 16.3 — **product-service** (`product` + `category` + `search` + `review`). Fully self-contained catalog data, no writes depend on user-service or anything else — the last "easy" extraction before cart-service, which will be the first to make an inter-service call to *fetch* data (product price/name) rather than just fire-and-forget notify.
+
+---
+
+## 16.3 — product-service (product + category + search + review)
+
+### System so far
+
+```mermaid
+flowchart LR
+    subgraph client [Client / Postman]
+    end
+
+    client -->|login/register| US[user-service :8082<br/>ecommerce_users DB]
+    client -->|browse / admin CRUD| PS[product-service :8083<br/>ecommerce_products DB]
+    US -->|POST welcome email<br/>fire-and-forget| NS[notification-service :8081<br/>no DB]
+
+    PS -. same Redis,<br/>different DB index .-> R[(Redis)]
+
+    style US fill:#2b6cb0,color:#fff
+    style PS fill:#2f855a,color:#fff
+    style NS fill:#b7791f,color:#fff
+    style R fill:#555,color:#fff
+```
+
+Monolith (port 8080) still runs untouched alongside all three — nothing above replaces it yet.
+
+### The one real fix this extraction needed: `Review.user`
+
+```mermaid
+flowchart LR
+    subgraph before["Monolith (one DB)"]
+        R1["Review"] -->|"@ManyToOne User"| U1["User (same DB)"]
+    end
+    subgraph after["Split (two DBs)"]
+        R2["Review"] -->|"Long userId<br/>(no FK, no join)"| gap["✂ network boundary"]
+        gap --> U2["User (user-service's DB)"]
+    end
+```
+
+Everything else in `product`/`category`/`search` was self-contained and copied unchanged.
+
+### The bigger lesson: two different JWT filters, on purpose
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant US as user-service
+    participant PS as product-service
+
+    C->>US: POST /api/auth/login
+    US->>US: check password, load roles from its OWN DB
+    US-->>C: JWT (sub=email, roles=[...])
+
+    C->>PS: POST /api/categories (Bearer JWT)
+    Note over PS: StatelessJwtAuthFilter<br/>verify signature + read roles<br/>FROM THE TOKEN — no DB call
+    PS->>PS: @PreAuthorize("hasRole('ADMIN')")
+    PS-->>C: 201 Created
+```
+
+| | user-service's `JwtAuthFilter` | product-service's `StatelessJwtAuthFilter` |
+|---|---|---|
+| Checks | DB (`loadUserByUsername`) | Token claims only |
+| Why | It owns the `users` table — cheap, catches disabled accounts instantly | Owns no `users` table — can't check even if it wanted to |
+| Cost | One DB read per request | Zero extra I/O per request |
+| Staleness | None | Up to token expiry (24h) if an account gets disabled |
+
+### Other decisions, briefly
+- **DB**: `ecommerce_products`, same Postgres instance, separate database (same pattern as 16.2).
+- **Redis**: shared instance with the monolith, but `spring.data.redis.database=1` — a different logical DB slot, so cache keys (`products::all`, `category::5`...) don't collide with the monolith's own cache on slot 0.
+- **Redis down entirely?** App still starts and works — `management.health.redis.enabled=false` added, since caching here is an optimization (ADR B-10), not a hard dependency.
+
+### Verified live (all three services running together)
+
+```mermaid
+flowchart TD
+    A["POST /api/auth/login (user-service)<br/>admin@test.com"] -->|JWT with ROLE_ADMIN| B["POST /api/categories (product-service)"]
+    B -->|201 Created| C["Electronics category created"]
+    C --> D["POST /api/products (product-service)<br/>as ADMIN"]
+    D -->|201 Created| E["iPhone 16 created"]
+    F["Same request as ROLE_USER token"] -->|403 Forbidden| G["role check enforced, no DB call needed"]
+    H["No token at all"] -->|200 OK on GET /products| I["public browsing still works"]
+```
+
+All five outcomes above were hit exactly as shown — 201 / 201 / 403 / 200, in one live run across three separate JVMs.
+
+### What's next?
+Phase 16.4 — **cart-service**. First service that needs to *fetch* data from another service mid-request (product price + name from product-service) rather than fire-and-forget notify — a different, harder integration shape than anything built so far.
