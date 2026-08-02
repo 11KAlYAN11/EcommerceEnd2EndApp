@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### verify-services.sh runtime logs ###
+logs/
