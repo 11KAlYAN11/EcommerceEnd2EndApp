@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 30px auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .header { background: #d32f2f; color: white; padding: 30px; text-align: center; }
+    .header h1 { margin: 0; font-size: 24px; }
+    .body { padding: 30px; }
+    .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 12px; color: #aaa; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Order Cancelled</h1>
+  </div>
+  <div class="body">
+    <p>Hi <strong th:text="${firstName}">Customer</strong>,</p>
+    <p>Your order <strong>#<span th:text="${orderId}">0</span></strong> has been cancelled.</p>
+    <p>Amount <strong th:text="'₹' + ${totalPrice}">₹0</strong> will be refunded if payment was made.</p>
+    <p>If you didn't request this cancellation, please contact support immediately.</p>
+  </div>
+  <div class="footer">© 2026 EcommerceApp</div>
+</div>
+</body>
+</html>

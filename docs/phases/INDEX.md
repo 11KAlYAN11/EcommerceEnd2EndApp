@@ -24,7 +24,7 @@
 | [Phase 13](Phase-13-Testing.md) | Testing | JUnit5, Mockito, @WebMvcTest, MockMvc, @WithMockUser, H2, ReflectionTestUtils | ✅ |
 | [Phase 14](Phase-14-Observability.md) | Observability | MDC correlation ID, Micrometer, Prometheus, custom counters/gauges/timers | ✅ |
 | [Phase 15](Phase-15-Production-Hardening.md) | Production Hardening | Rate limiting, security headers, multi-stage Docker, graceful shutdown, prod profile | ✅ |
-| Phase 16 | Microservices Intro | Service decomposition, API Gateway, Service discovery | 🔜 |
+| [Phase 16](Phase-16-Microservices-Intro.md) | Microservices Intro | Service decomposition, API Gateway, Service discovery | 🚧 (16.1 notification-service ✅, 16.2 user-service ✅) |
 | Phase 17 | Message Queues | Kafka / RabbitMQ, async order processing | 🔜 |
 | Phase 18 | Event Sourcing | CQRS, Event store, eventual consistency | 🔜 |
 | Phase 19 | Cloud Deployment | AWS/GCP, K8s basics, CI/CD pipeline | 🔜 |
