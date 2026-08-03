@@ -323,3 +323,161 @@ All five outcomes above were hit exactly as shown — 201 / 201 / 403 / 200, in 
 
 ### What's next?
 Phase 16.4 — **cart-service**. First service that needs to *fetch* data from another service mid-request (product price + name from product-service) rather than fire-and-forget notify — a different, harder integration shape than anything built so far.
+
+---
+
+## 16.4 — cart-service (first hard dependency on another service)
+
+### Fire-and-forget vs. required fetch
+
+```mermaid
+flowchart TB
+    subgraph t1["16.2 -- fire and forget"]
+        A1[user-service] -->|"notify, don't wait"| B1[notification-service]
+        B1x["notification-service down?<br/>registration still succeeds"]
+    end
+    subgraph t2["16.4 -- required fetch"]
+        A2[cart-service] -->|"need price/stock NOW"| B2[product-service]
+        B2x["product-service down?<br/>add-to-cart fails (503)"]
+    end
+    style t1 fill:#f7f8fa,stroke:#d8dde3
+    style t2 fill:#f7f8fa,stroke:#d8dde3
+```
+
+This is the harder integration shape: cart can't decide anything about a product without asking product-service.
+
+### Entity changes (same pattern as before, applied twice)
+
+```mermaid
+flowchart LR
+    subgraph old["Monolith"]
+        C1[Cart] -->|"@OneToOne User"| U[User]
+        CI1[CartItem] -->|"@ManyToOne Product"| P[Product]
+    end
+    subgraph new["cart-service"]
+        C2[Cart] -->|"userEmail (from JWT, no lookup)"| J["✂"]
+        CI2[CartItem] -->|"productId + snapshot<br/>(name, price, image)"| J2["✂"]
+    end
+```
+
+`userEmail` needed **no network call at all** — it's the JWT `sub` claim, already trusted statelessly (same pattern as 16.3). `productId` needed a real fetch.
+
+### Read vs. write: only writes call product-service
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant CS as cart-service
+    participant PS as product-service
+
+    C->>CS: POST /api/cart/items {productId, qty}
+    CS->>PS: GET /api/products/{id}
+    PS-->>CS: name, price, stock, active
+    CS->>CS: validate stock, save snapshot
+    CS-->>C: 200, cart with item
+
+    Note over C,CS: later, just viewing the cart...
+    C->>CS: GET /api/cart
+    Note over CS: NO call to product-service --<br/>reads the stored snapshot
+    CS-->>C: 200, cart (price as of last add/update)
+```
+
+**Trade-off, stated plainly**: `GET /cart` is fast and works even if product-service is down, but the price shown can be stale until the next add/update touches that line. This is deliberate — Cart isn't a financial record like Order (whose price snapshot in ADR B-07 is permanent); this one just refreshes itself naturally every time the item is touched.
+
+### Verified live (all 4 services)
+`login → JWT` → `create category` → `create product` → `POST /cart/items (cart-service calls product-service)` → `GET /cart shows the fetched name+price` — all via [verify-services.sh](../../verify-services.sh) `flow` command, output:
+```
+OK: got JWT from user-service
+OK: product-service accepted the token and created a category
+OK: public GET /products works with no token at all
+OK: cart-service fetched the product from product-service and added it
+OK: GET /cart shows the product name/price snapshot pulled from product-service
+```
+
+### A script bug this caught (worth keeping as a lesson)
+First `flow` run after adding cart-service failed with "product-service did not return a category id" — the script's own error message guessed "jwt.secret mismatch." **Wrong.** The real cause: the category name was a fixed literal (`"SmokeTestCategory"`), and Postgres persists across restarts — the 2nd run hit a real unique-constraint 409, which looks nothing like a JWT problem once you actually read the response body instead of trusting the first plausible-sounding guess. Fixed by suffixing every test run with a timestamp, and by printing the raw response on failure instead of guessing.
+
+### What's next?
+Phase 16.5 — **order-service** and **payment-service**. The most coupled domain left (touches user, product, cart, triggers payment + notification) — saved for last on purpose, per the original extraction order.
+
+---
+
+## 16.5 — order-service (the hard one)
+
+### Everything it touches
+
+```mermaid
+flowchart TB
+    C[Client] -->|POST /orders, Bearer JWT| OS[order-service :8085<br/>ecommerce_orders DB]
+    OS -->|GET /cart, DELETE /cart<br/>same JWT forwarded| CS[cart-service]
+    OS -->|GET /products/id<br/>PATCH /products/id/stock| PS[product-service]
+    OS -->|GET /addresses/id or /default| US[user-service]
+    OS -->|fire-and-forget| NS[notification-service]
+
+    style OS fill:#c53030,color:#fff
+```
+
+One customer action now costs **4 network calls minimum** before the response returns. This is exactly why it was extracted last — every pattern used here (forward the JWT, fetch fresh, snapshot, fire-and-forget) was already proven individually on a simpler service first.
+
+### Forwarding the token, not just trusting the claims
+
+Cart-service and product-service both require auth on everything they expose to order-service. order-service doesn't have its own identity to call them as — it acts *as the customer*. So the filter stashes the raw incoming token in a `ThreadLocal` for the duration of the request, and every outgoing client call re-attaches it:
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant OS as order-service
+    participant CS as cart-service
+    participant PS as product-service
+
+    C->>OS: POST /orders  (Bearer JWT)
+    Note over OS: StatelessJwtAuthFilter validates it,<br/>stashes raw token in CurrentRequestToken
+    OS->>CS: GET /cart  (same Bearer JWT)
+    CS-->>OS: [{productId, quantity}, ...]
+    loop each item
+        OS->>PS: GET /products/{id}  (public, no token needed)
+        PS-->>OS: fresh price, stock, name
+        OS->>PS: PATCH /products/{id}/stock  (same Bearer JWT)
+    end
+    OS->>CS: DELETE /cart  (same Bearer JWT)
+    OS-->>C: 201 Created
+```
+
+### The snapshot pattern, applied to the two fields the monolith's own comments predicted
+
+```mermaid
+flowchart LR
+    subgraph before["Monolith"]
+        O1[Order] -->|"@ManyToOne User"| U[User]
+        O1 -->|"@ManyToOne Address"| A[Address]
+        OI1[OrderItem] -->|"@ManyToOne Product"| P[Product]
+        OI1 -->|"priceAtPurchase ✓ already snapshotted"| OI1
+    end
+    subgraph after["order-service"]
+        O2[Order] -->|"userEmail (JWT, no lookup)"| j1["✂"]
+        O2 -->|"shippingStreet/City/State/...<br/>(fetched + snapshotted at order time)"| j2["✂"]
+        OI2[OrderItem] -->|"productId + productName (NEW snapshot)<br/>+ priceAtPurchase (already existed)"| j3["✂"]
+    end
+```
+
+The monolith's `Order.java` comment literally said: *"Better approach (Phase 6 improvement): snapshot address fields directly on the order... For now, FK is fine for learning."* Splitting into services didn't just permit that fix — it required it. Same story for `OrderItem.productName`: the comment already said price-only snapshotting was incomplete. This is worth noticing: **the monolith's own documentation was predicting exactly what the distributed version would need**, three phases in advance.
+
+### Two gaps stated plainly, not hidden
+
+1. **No distributed transaction.** `@Transactional` on `placeOrder()` only covers this service's own `orders` table now. If it fails *after* product-service already decremented stock, that decrement does not roll back. The monolith had this all inside one DB transaction; the split version doesn't, and fixing it properly needs a saga/compensating-action pattern — Phase 17+ territory, not solvable with an annotation.
+2. **Stock adjustment has no service identity.** `PATCH /products/{id}/stock` just requires "some valid JWT," forwarded from whatever customer is checking out — there's no way yet to say "only order-service may call this." A real system would use a service credential or mTLS here. Deferred on purpose, flagged clearly.
+
+### A small but real ripple: JWT gained a `firstName` claim
+order-service needs a first name for the confirmation email, but has no `users` table to look it up in. Rather than add a whole new call to user-service just for a name, `user-service`'s `JwtUtil.generateToken` now embeds `firstName` as a claim at login/register time — the same trade-off the `roles` claim already made (staleness until next login, in exchange for zero extra calls).
+
+### Verified live (all 5 services)
+Via `verify-services.sh flow`:
+```
+OK: order-service placed an order (id=2) -- pulled cart, fetched fresh prices, decremented stock
+OK: product-service stock actually decremented (5 -> 3)
+OK: cart-service's cart was cleared by order-service after placement
+```
+Also manually verified: cancelling the order restored stock exactly (3 → back to original), and notification-service's log showed the order-confirmation attempt landing (same expected Gmail-auth failure as every prior test — the pipeline works, only the fake credentials don't).
+
+### What's next?
+Phase 16.6 — **payment-service**. Needs a way to read AND advance order status (`PATCH /orders/{id}/confirm-payment` already added and reserved for it) — the last piece before this phase's services fully replace the monolith's core purchase flow.

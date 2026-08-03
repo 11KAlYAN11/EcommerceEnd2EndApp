@@ -30,6 +30,8 @@ SERVICES=(
   "notification:8081:notification-service/target/notification-service-0.0.1-SNAPSHOT.jar:/actuator/health"
   "user:8082:user-service/target/user-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
   "product:8083:product-service/target/product-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
+  "cart:8084:cart-service/target/cart-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
+  "order:8085:order-service/target/order-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
 )
 
 LOG_DIR="logs"
@@ -126,17 +128,24 @@ flow_test() {
   fi
   echo "OK: got JWT from user-service (${token:0:20}...)"
 
-  local code
-  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8083/api/categories \
+  # Unique name every run -- Category.name has a DB unique constraint, so a
+  # fixed literal name would 409 on the 2nd+ run against a real (persistent)
+  # Postgres DB. This is NOT a JWT problem; a stale/duplicate name just looks
+  # like one if you don't read the actual response body.
+  local run_tag; run_tag=$(date +%s)
+  local cat_resp code cat_id
+  cat_resp=$(curl -s -X POST http://localhost:8083/api/categories \
     -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
-    -d '{"name":"SmokeTestCategory","description":"created by verify-services.sh"}')
+    -d "{\"name\":\"SmokeTestCategory-$run_tag\",\"description\":\"created by verify-services.sh\"}")
+  cat_id=$(echo "$cat_resp" | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*')
 
-  if [ "$code" = "201" ]; then
-    echo "OK: product-service accepted the token and created a category (201)"
+  if [ -n "$cat_id" ]; then
+    echo "OK: product-service accepted the token and created a category (id=$cat_id)"
   else
-    echo "FAIL: product-service returned $code instead of 201."
-    echo "  Most likely cause: jwt.secret differs between user-service and product-service"
-    echo "  application.properties (or their JWT_SECRET env vars) -- they must match exactly."
+    echo "FAIL: product-service did not return a category id. Raw response:"
+    echo "  $cat_resp"
+    echo "  (401/403 here would mean a real JWT/secret problem -- a 409 'Data conflict'"
+    echo "  usually just means the name already exists from a previous run.)"
     return 1
   fi
 
@@ -145,6 +154,77 @@ flow_test() {
     echo "OK: public GET /products works with no token at all (200)"
   else
     echo "FAIL: public GET /products returned $code (expected 200 -- browsing should never need auth)"
+  fi
+
+  # cart-service: only runs this step if it's actually up (older checkouts won't have it yet)
+  if curl -s -o /dev/null -w "%{http_code}" http://localhost:8084/api/actuator/health 2>/dev/null | grep -q 200; then
+    local prod_resp prod_id
+    prod_resp=$(curl -s -X POST http://localhost:8083/api/products \
+      -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+      -d "{\"name\":\"SmokeTestProduct-$run_tag\",\"price\":9.99,\"stockQuantity\":5,\"categoryId\":$cat_id}")
+    prod_id=$(echo "$prod_resp" | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*')
+
+    if [ -z "$prod_id" ]; then
+      echo "FAIL: could not create a product to add to cart. Raw response:"
+      echo "  $prod_resp"
+      return 1
+    fi
+
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8084/api/cart/items \
+      -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+      -d "{\"productId\":$prod_id,\"quantity\":2}")
+
+    if [ "$code" = "200" ]; then
+      echo "OK: cart-service fetched the product from product-service and added it (200)"
+    else
+      echo "FAIL: cart-service returned $code adding product $prod_id."
+      echo "  Most likely cause: product-service unreachable at services.product.base-url,"
+      echo "  or the JWT wasn't trusted (same jwt.secret check as above applies here too)."
+      return 1
+    fi
+
+    local cart_json
+    cart_json=$(curl -s http://localhost:8084/api/cart -H "Authorization: Bearer $token")
+    if echo "$cart_json" | grep -q "SmokeTestProduct-$run_tag"; then
+      echo "OK: GET /cart shows the product name/price snapshot pulled from product-service"
+    else
+      echo "FAIL: cart contents don't show the expected product -- $cart_json"
+    fi
+
+    # order-service: only runs if it's up. Touches ALL FOUR other services in one call.
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:8085/api/actuator/health 2>/dev/null | grep -q 200; then
+      local stock_before order_resp order_id stock_after
+      stock_before=$(curl -s http://localhost:8083/api/products/$prod_id | grep -o '"stockQuantity":[0-9]*' | grep -o '[0-9]*')
+
+      order_resp=$(curl -s -X POST http://localhost:8085/api/orders \
+        -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d '{}')
+      order_id=$(echo "$order_resp" | grep -o '"orderId":[0-9]*' | head -1 | grep -o '[0-9]*')
+
+      if [ -z "$order_id" ]; then
+        echo "FAIL: order-service did not return an orderId. Raw response:"
+        echo "  $order_resp"
+        return 1
+      fi
+      echo "OK: order-service placed an order (id=$order_id) -- pulled cart, fetched fresh prices, decremented stock"
+
+      stock_after=$(curl -s http://localhost:8083/api/products/$prod_id | grep -o '"stockQuantity":[0-9]*' | grep -o '[0-9]*')
+      if [ "$stock_after" -lt "$stock_before" ]; then
+        echo "OK: product-service stock actually decremented ($stock_before -> $stock_after)"
+      else
+        echo "FAIL: stock did not decrement ($stock_before -> $stock_after) -- check order-service's ProductClient.adjustStock call"
+      fi
+
+      cart_json=$(curl -s http://localhost:8084/api/cart -H "Authorization: Bearer $token")
+      if echo "$cart_json" | grep -q '"totalItems":0'; then
+        echo "OK: cart-service's cart was cleared by order-service after placement"
+      else
+        echo "FAIL: cart was not cleared -- $cart_json"
+      fi
+    else
+      echo "SKIP: order-service not running -- add it to test the full checkout chain"
+    fi
+  else
+    echo "SKIP: cart-service not running -- add it to test the cross-service fetch path"
   fi
 }
 

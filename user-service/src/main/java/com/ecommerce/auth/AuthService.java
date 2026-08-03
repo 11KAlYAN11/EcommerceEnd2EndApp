@@ -74,7 +74,7 @@ public class AuthService {
         notificationClient.sendWelcome(user.getEmail(), user.getFirstName());
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String token = jwtUtil.generateToken(userDetails);
+        String token = jwtUtil.generateToken(userDetails, user.getFirstName());
 
         return buildAuthResponse(user, token);
     }
@@ -86,7 +86,7 @@ public class AuthService {
 
         User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
-        String token = jwtUtil.generateToken(userDetails);
+        String token = jwtUtil.generateToken(userDetails, user.getFirstName());
 
         log.info("User logged in: {}", user.getEmail());
         return buildAuthResponse(user, token);

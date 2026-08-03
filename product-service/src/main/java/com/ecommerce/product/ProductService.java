@@ -105,6 +105,37 @@ public class ProductService {
         productRepository.save(product);
     }
 
+    /**
+     * NEW in Phase 16.5 -- the monolith never needed this either. OrderService
+     * used to do `product.setStockQuantity(product.getStockQuantity() - qty)`
+     * directly on the same JPA entity, inside the same transaction as the
+     * order write. Now order-service has no access to this entity at all, so
+     * it asks for an adjustment over HTTP instead.
+     *
+     * Known gap, stated plainly: this is a read-then-write with no
+     * distributed transaction wrapping it and the order-service write. Two
+     * concurrent orders for the last unit of stock can both pass this check
+     * before either commits -- the exact race condition ADR B-08 already
+     * flagged as an accepted gap in the MONOLITH (single-JVM, no @Version
+     * lock). Splitting into services doesn't introduce this race, but it
+     * does remove the option of fixing it later with a simple @Transactional
+     * boundary -- a real distributed fix needs a saga or reservation
+     * pattern (Phase 17+), not just annotations.
+     */
+    @PreAuthorize("isAuthenticated()")
+    @CacheEvict(value = "product", key = "#id")
+    @Transactional
+    public ProductResponse adjustStock(Long id, int delta) {
+        Product product = findActiveProductById(id);
+        int newQty = product.getStockQuantity() + delta;
+        if (newQty < 0) {
+            throw new IllegalArgumentException(
+                    "Cannot reduce stock below zero for: " + product.getName());
+        }
+        product.setStockQuantity(newQty);
+        return toResponse(productRepository.save(product));
+    }
+
     @Transactional(readOnly = true)
     public Page<ProductResponse> searchWithFilters(
             String keyword, BigDecimal minPrice, BigDecimal maxPrice,

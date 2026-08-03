@@ -3,6 +3,7 @@ package com.ecommerce.product;
 import com.ecommerce.common.response.ApiResponse;
 import com.ecommerce.product.dto.ProductRequest;
 import com.ecommerce.product.dto.ProductResponse;
+import com.ecommerce.product.dto.StockAdjustRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -57,5 +58,13 @@ public class ProductController {
     public ResponseEntity<ApiResponse<Void>> deleteProduct(@PathVariable Long id) {
         productService.deleteProduct(id);
         return ResponseEntity.ok(ApiResponse.success("Product deleted"));
+    }
+
+    /** Called by order-service (forwarding the customer's own JWT) at order placement/cancellation. */
+    @PatchMapping("/{id}/stock")
+    public ResponseEntity<ApiResponse<ProductResponse>> adjustStock(
+            @PathVariable Long id, @Valid @RequestBody StockAdjustRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Stock adjusted",
+                productService.adjustStock(id, request.getDelta())));
     }
 }

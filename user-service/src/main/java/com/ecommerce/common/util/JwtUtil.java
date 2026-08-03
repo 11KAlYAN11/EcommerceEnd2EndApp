@@ -38,10 +38,26 @@ public class JwtUtil {
     }
 
     public String generateToken(UserDetails userDetails) {
+        return generateToken(userDetails, null);
+    }
+
+    /**
+     * firstName as a claim (Phase 16.5): order-service needs it for
+     * notification emails but has no `users` table to look it up in.
+     * Cheaper to denormalize a small, rarely-changing field into the token
+     * at issue-time than to add a whole new service-to-service call just to
+     * fetch a name. Trade-off: if a user renames themselves mid-token-life,
+     * downstream services see the old name until they log in again (same
+     * staleness-until-expiry trade-off as the roles claim already has).
+     */
+    public String generateToken(UserDetails userDetails, String firstName) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("roles", userDetails.getAuthorities().stream()
                 .map(Object::toString)
                 .toList());
+        if (firstName != null) {
+            claims.put("firstName", firstName);
+        }
         return buildToken(claims, userDetails.getUsername());
     }
 
