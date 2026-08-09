@@ -7,6 +7,7 @@
 #   ./verify-services.sh stop  [name|all]    stop one service (or all)
 #   ./verify-services.sh test  [name|all]    just poll health, no (re)start
 #   ./verify-services.sh flow                tier-2: login -> JWT -> use it cross-service
+#   ./verify-services.sh endpoints           print every known endpoint, per service, with curl examples
 #
 # Handles the two recurring problems by hand:
 #   PORT ISSUES: a crashed/leftover run leaves java.exe holding a port. On
@@ -32,6 +33,7 @@ SERVICES=(
   "product:8083:product-service/target/product-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
   "cart:8084:cart-service/target/cart-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
   "order:8085:order-service/target/order-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
+  "payment:8086:payment-service/target/payment-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
 )
 
 LOG_DIR="logs"
@@ -220,12 +222,131 @@ flow_test() {
       else
         echo "FAIL: cart was not cleared -- $cart_json"
       fi
+
+      # payment-service: only runs if it's up. Last link in the chain --
+      # confirming payment should flip the ORDER's status via order-service.
+      if curl -s -o /dev/null -w "%{http_code}" http://localhost:8086/api/actuator/health 2>/dev/null | grep -q 200; then
+        code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8086/api/payments/initiate/$order_id?method=UPI" \
+          -H "Authorization: Bearer $token")
+        if [ "$code" = "200" ]; then
+          echo "OK: payment-service initiated a payment for order $order_id (fetched order total via order-service)"
+        else
+          echo "FAIL: payment initiate returned $code for order $order_id"
+          return 1
+        fi
+
+        code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8086/api/payments/confirm/$order_id" \
+          -H "Authorization: Bearer $token")
+        if [ "$code" = "200" ]; then
+          echo "OK: payment-service confirmed the payment"
+        else
+          echo "FAIL: payment confirm returned $code for order $order_id"
+          return 1
+        fi
+
+        order_json=$(curl -s "http://localhost:8085/api/orders/$order_id" -H "Authorization: Bearer $token")
+        if echo "$order_json" | grep -q '"status":"CONFIRMED"'; then
+          echo "OK: order-service's order flipped to CONFIRMED -- payment-service's write-back call worked"
+        else
+          echo "FAIL: order status did not flip to CONFIRMED -- $order_json"
+        fi
+      else
+        echo "SKIP: payment-service not running -- add it to test the full purchase chain"
+      fi
     else
       echo "SKIP: order-service not running -- add it to test the full checkout chain"
     fi
   else
     echo "SKIP: cart-service not running -- add it to test the cross-service fetch path"
   fi
+}
+
+endpoints() {
+  cat <<'EOF'
+============================================================================
+ notification-service  :8081   (no context-path, no auth on any of these)
+============================================================================
+  GET  /actuator/health
+  POST /api/notifications/welcome              {"recipientEmail":"","firstName":""}
+  POST /api/notifications/order-confirmation   {recipientEmail, firstName, orderId, status, totalPrice, items[], placedAt}
+  POST /api/notifications/order-cancellation   {recipientEmail, firstName, orderId, totalPrice}
+  POST /api/notifications/low-stock-alert      {productName, remainingStock}
+
+============================================================================
+ user-service  :8082   (context-path /api)   -- ISSUES the JWT everyone else trusts
+============================================================================
+  GET  /api/actuator/health
+  POST /api/auth/register            {firstName, lastName, email, password, phone?}
+  POST /api/auth/login               {email, password}                          -> returns { data.token }
+  GET  /api/addresses/{id}           [auth]
+  GET  /api/addresses/default        [auth]
+  GET  /api/dev/users                dev-profile only, no auth
+  POST /api/dev/make-admin?email=    dev-profile only, no auth -- promotes a user to ROLE_ADMIN
+
+  Seeded accounts: admin@test.com / Admin@123 (ROLE_ADMIN), user@test.com / User@123 (ROLE_USER)
+
+  Example:
+    curl -X POST http://localhost:8082/api/auth/login -H "Content-Type: application/json" \
+      -d '{"email":"admin@test.com","password":"Admin@123"}'
+
+============================================================================
+ product-service  :8083   (context-path /api)   -- browsing is public, writes need [auth]/[admin]
+============================================================================
+  GET  /api/actuator/health
+  GET  /api/products                       public, ?page=&size=&sortBy=&search=
+  GET  /api/products/{id}                  public
+  GET  /api/products/category/{categoryId} public
+  POST /api/products                       [admin]  {name, price, stockQuantity, categoryId, description?, imageUrl?}
+  PUT  /api/products/{id}                  [admin]
+  DELETE /api/products/{id}                [admin]  (soft delete)
+  PATCH /api/products/{id}/stock           [auth]   {"delta": -2}   -- negative=decrement, positive=restore
+  GET  /api/categories                     public
+  POST /api/categories                     [admin]  {name, description?}
+  GET  /api/search/products?q=&minPrice=&maxPrice=&categoryId=   public
+
+============================================================================
+ cart-service  :8084   (context-path /api)   -- EVERYTHING here needs [auth]
+============================================================================
+  GET  /api/actuator/health
+  GET    /api/cart
+  POST   /api/cart/items                   {productId, quantity}
+  PATCH  /api/cart/items/{cartItemId}?quantity=N
+  DELETE /api/cart/items/{cartItemId}
+  DELETE /api/cart
+
+============================================================================
+ order-service  :8085   (context-path /api)   -- EVERYTHING here needs [auth]
+============================================================================
+  GET  /api/actuator/health
+  POST   /api/orders                       {} or {"shippingAddressId": N}   -- places order from your cart
+  GET    /api/orders?page=&size=
+  GET    /api/orders/{id}
+  DELETE /api/orders/{id}/cancel
+  PATCH  /api/orders/{id}/confirm-payment  meant to be called by payment-service, not directly
+
+============================================================================
+ payment-service  :8086   (context-path /api)   -- EVERYTHING here needs [auth]
+============================================================================
+  GET  /api/actuator/health
+  POST /api/payments/initiate/{orderId}?method=UPI   (CREDIT_CARD|DEBIT_CARD|UPI|NET_BANKING|WALLET|COD)
+  POST /api/payments/confirm/{orderId}
+  POST /api/payments/fail/{orderId}
+  GET  /api/payments/order/{orderId}
+
+============================================================================
+ [auth] = header  Authorization: Bearer <token from /api/auth/login>
+ [admin] = [auth] AND the token's roles include ROLE_ADMIN
+
+ Full purchase chain, copy-paste order:
+   1. POST user :8082      /api/auth/login              -> save token
+   2. POST product :8083   /api/categories  [admin]
+   3. POST product :8083   /api/products    [admin]
+   4. POST cart :8084      /api/cart/items  [auth]
+   5. POST order :8085     /api/orders      [auth]
+   6. POST payment :8086   /api/payments/initiate/{orderId}  [auth]
+   7. POST payment :8086   /api/payments/confirm/{orderId}   [auth]
+============================================================================
+EOF
 }
 
 usage() {
@@ -268,5 +389,6 @@ case "${1:-}" in
     fi
     ;;
   flow) flow_test ;;
+  endpoints) endpoints ;;
   *) usage ;;
 esac

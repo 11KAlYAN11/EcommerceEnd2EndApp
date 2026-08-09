@@ -6,6 +6,8 @@
 
 ## Quick Navigation
 
+> **Migrating to microservices?** [docs/MIGRATION.md](../MIGRATION.md) is the full end-to-end picture (diagrams, patterns, gaps, what's left). Phase 16 below is the step-by-step build log.
+
 | Phase | Topic | Key Concepts | Status |
 |---|---|---|---|
 | [Phase 0](Phase-0-Project-Planning.md) | Project Planning | SDLC, Monolith vs Microservices, Package-by-feature, Git Flow | ✅ |
@@ -24,7 +26,7 @@
 | [Phase 13](Phase-13-Testing.md) | Testing | JUnit5, Mockito, @WebMvcTest, MockMvc, @WithMockUser, H2, ReflectionTestUtils | ✅ |
 | [Phase 14](Phase-14-Observability.md) | Observability | MDC correlation ID, Micrometer, Prometheus, custom counters/gauges/timers | ✅ |
 | [Phase 15](Phase-15-Production-Hardening.md) | Production Hardening | Rate limiting, security headers, multi-stage Docker, graceful shutdown, prod profile | ✅ |
-| [Phase 16](Phase-16-Microservices-Intro.md) | Microservices Intro | Service decomposition, API Gateway, Service discovery | 🚧 (16.1 notification ✅, 16.2 user ✅, 16.3 product ✅, 16.4 cart ✅, 16.5 order ✅) |
+| [Phase 16](Phase-16-Microservices-Intro.md) | Microservices Intro | Service decomposition, API Gateway, Service discovery | 🚧 (all 6 domain services ✅ — gateway + frontend cutover remain) |
 | Phase 17 | Message Queues | Kafka / RabbitMQ, async order processing | 🔜 |
 | Phase 18 | Event Sourcing | CQRS, Event store, eventual consistency | 🔜 |
 | Phase 19 | Cloud Deployment | AWS/GCP, K8s basics, CI/CD pipeline | 🔜 |

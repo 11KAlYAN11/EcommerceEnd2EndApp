@@ -481,3 +481,46 @@ Also manually verified: cancelling the order restored stock exactly (3 → back 
 
 ### What's next?
 Phase 16.6 — **payment-service**. Needs a way to read AND advance order status (`PATCH /orders/{id}/confirm-payment` already added and reserved for it) — the last piece before this phase's services fully replace the monolith's core purchase flow.
+
+---
+
+## 16.6 — payment-service (last domain extraction)
+
+```mermaid
+flowchart LR
+    C[Client] -->|initiate/confirm/fail| PAY[payment-service :8086<br/>ecommerce_payments DB]
+    PAY -->|GET /orders/id -- ownership check<br/>PATCH /orders/id/confirm-payment| OS[order-service]
+    style PAY fill:#805ad5,color:#fff
+```
+
+Smallest of the six services, and the last domain one. `Payment.order` (FK) became `orderId` (no FK) — same pattern as every prior step. The only new idea: `OrderClient.getOrder()` doesn't do its own ownership check — it just forwards the caller's JWT to order-service's existing `GET /orders/{id}`, which already filters by the token's email. A 404 from that call means "not yours, or doesn't exist" either way; payment-service doesn't need to know which.
+
+**Same gap as order-service's stock adjustment, one level up**: `confirmPayment()` saves `Payment.status = COMPLETED` in its own DB, then makes a *separate* HTTP call to flip the order to `CONFIRMED`. If the process dies between those two steps, the payment shows completed while the order still shows pending — a real inconsistency window a saga/outbox pattern is meant to close (Phase 17+), not something fixed here.
+
+**Verified live** — all 6 services, one command (`verify-services.sh flow`):
+```
+OK: payment-service initiated a payment for order 3 (fetched order total via order-service)
+OK: payment-service confirmed the payment
+OK: order-service's order flipped to CONFIRMED -- payment-service's write-back call worked
+```
+11 checks total, across 6 independently-running JVMs, from `login` through `place order` through `confirm payment` through `order status flips`.
+
+## Domain extraction complete
+
+```mermaid
+flowchart TB
+    N[notification :8081] 
+    U[user :8082]
+    P[product :8083]
+    C[cart :8084]
+    O[order :8085]
+    PAY[payment :8086]
+    style N fill:#2f9e5c,color:#fff
+    style U fill:#2f9e5c,color:#fff
+    style P fill:#2f9e5c,color:#fff
+    style C fill:#2f9e5c,color:#fff
+    style O fill:#2f9e5c,color:#fff
+    style PAY fill:#2f9e5c,color:#fff
+```
+
+All 6 domains from the monolith are now independently-running services with their own databases. Still ahead, **not part of "done"**: an API Gateway (single entry point — right now each service is called on its own port directly), pointing the frontend at it, and only then retiring the monolith. See the dedicated migration write-up for the full picture end to end.
