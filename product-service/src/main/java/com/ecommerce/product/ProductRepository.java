@@ -31,4 +31,6 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     Page<Product> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
 
     Page<Product> findByPriceBetweenAndActiveTrue(BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable);
+
+    long countByActiveTrue();
 }

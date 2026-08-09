@@ -149,6 +149,12 @@ public class ProductService {
         return productRepository.findAll(spec, pageable).map(this::toResponse);
     }
 
+    /** For order-service's admin dashboard summary (16.8) -- avoids order-service needing to know anything about how products are stored. */
+    @Transactional(readOnly = true)
+    public long countActive() {
+        return productRepository.countByActiveTrue();
+    }
+
     private Product findActiveProductById(Long id) {
         return productRepository.findById(id)
                 .filter(Product::isActive)

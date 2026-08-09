@@ -1,6 +1,6 @@
 # ShopEase: Monolith → Microservices Migration
 
-**Status**: All 6 domain services extracted and verified live. Gateway + frontend cutover still ahead.
+**Status**: All 6 domain services extracted, the API Gateway is live, the frontend is cut over (verified in an actual browser, full golden path), AND the one gap the cutover exposed — admin reporting — is closed. Only monolith decommission remains.
 **Companion reading**: [phases/Phase-16-Microservices-Intro.md](phases/Phase-16-Microservices-Intro.md) is the step-by-step build log (what we did, in order, as we did it). *This* document is the synthesized end-to-end picture — read this first, use that one for build-time detail.
 
 ---
@@ -16,12 +16,14 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    Client([Client / Postman]) --> N[notification :8081<br/>no DB]
-    Client --> U[user :8082<br/>ecommerce_users]
-    Client --> P[product :8083<br/>ecommerce_products + Redis]
-    Client --> CT[cart :8084<br/>ecommerce_cart]
-    Client --> O[order :8085<br/>ecommerce_orders]
-    Client --> PAY[payment :8086<br/>ecommerce_payments]
+    Client([Client / Postman]) --> GW[api-gateway :9000<br/>single entry point]
+
+    GW --> N[notification :8081<br/>no DB]
+    GW --> U[user :8082<br/>ecommerce_users]
+    GW --> P[product :8083<br/>ecommerce_products + Redis]
+    GW --> CT[cart :8084<br/>ecommerce_cart]
+    GW --> O[order :8085<br/>ecommerce_orders]
+    GW --> PAY[payment :8086<br/>ecommerce_payments]
 
     U -.fire-and-forget.-> N
     CT -->|fetch price/stock| P
@@ -31,6 +33,7 @@ flowchart TB
     O -.fire-and-forget.-> N
     PAY -->|read order, confirm order| O
 
+    style GW fill:#2b6cb0,color:#fff
     style N fill:#2f9e5c,color:#fff
     style U fill:#2f9e5c,color:#fff
     style P fill:#2f9e5c,color:#fff
@@ -39,10 +42,11 @@ flowchart TB
     style PAY fill:#805ad5,color:#fff
 ```
 
-**The monolith is still there, untouched, on :8080** — nothing has been deleted. These 6 services are a parallel system, verified to work, not yet wired to real traffic (frontend still points at the monolith).
+**The monolith is still there, untouched, on :8080** — nothing has been deleted. This whole stack is a parallel system, verified to work end-to-end through the gateway, not yet wired to real traffic (frontend still points at the monolith).
 
 | # | Service | Port | Database | Depends on |
 |---|---|---|---|---|
+| — | **api-gateway** | **9000** | *(none — pure router, WebFlux/Netty)* | routes to all 6 below |
 | 1 | notification | 8081 | *(none — stateless)* | — |
 | 2 | user | 8082 | ecommerce_users | notification (fire-and-forget) |
 | 3 | product | 8083 | ecommerce_products | Redis (optional cache, slot 1) |
@@ -202,7 +206,7 @@ One purchase = **9 inter-service calls** across 6 processes. Verified exactly th
 | No distributed transaction | order-service decrements stock via HTTP, then writes its own DB — if the DB write fails after, stock doesn't roll back | Saga / compensating-action pattern (Phase 17+) |
 | No service identity | `PATCH /products/{id}/stock` and `/orders/{id}/confirm-payment` accept *any* valid customer JWT, not just "order-service acting on someone's behalf" | Service credentials, mTLS, or a gateway-issued internal token |
 | No service discovery | every service finds the others via a hardcoded `base-url` in `application.properties` (overridable by env var) | Eureka/Consul — deliberately deferred until multiple instances/dynamic scaling actually exist |
-| No API Gateway yet | client must know 6 different ports directly | Spring Cloud Gateway — planned, not built (see §6) |
+| Gateway is a second reactive stack | `api-gateway` runs WebFlux/Netty; the other 6 run Servlet/Tomcat — two different threading models in one system now | Accepted as-is — it's what "Spring Cloud Gateway" means by default; a blocking `spring-cloud-starter-gateway-mvc` variant exists if this ever needs to change |
 | No message queue | every cross-service call is synchronous HTTP, including "fire-and-forget" ones (which just don't check the response) | Kafka/RabbitMQ — explicitly Phase 17, not Phase 16 |
 | Redis cache key collision (avoided, not solved generally) | product-service uses Redis logical DB slot 1 so it doesn't collide with the monolith's slot 0 | Fine for 2 consumers; a real fix is namespacing cache keys per service |
 
@@ -212,14 +216,16 @@ One purchase = **9 inter-service calls** across 6 processes. Verified exactly th
 
 ```mermaid
 flowchart LR
-    A["✅ 6 domain services<br/>extracted + verified"] --> B["⬜ API Gateway<br/>(Spring Cloud Gateway)"]
-    B --> C["⬜ Frontend cutover<br/>(VITE_API_URL -> gateway)"]
-    C --> D["⬜ Decommission<br/>monolith"]
+    A["✅ 6 domain services<br/>extracted + verified"] --> B["✅ API Gateway<br/>(Spring Cloud Gateway, :9000)"]
+    B --> C["✅ Frontend cutover<br/>(one-line vite.config.js change)"]
+    C --> E["✅ Admin reporting<br/>(gap found + closed post-cutover)"]
+    E --> D["⬜ Decommission<br/>monolith"]
 ```
 
-- **API Gateway** — single entry point in front of all 6 ports; also where request-level rate limiting/routing would live.
-- **Frontend cutover** — the React app's `api/` folder is already split per-domain (per the original README), so this should be a config change, not a rewrite.
-- **Decommission the monolith** — only after the frontend is fully cut over and the new services have run in place of it without incident.
+- **API Gateway** — ✅ done. Single entry point on `:9000` in front of all 6 services, pure routing (no JWT validation there — every service still checks its own, unchanged). Verified live: the full login → category → product → cart → order chain works identically through the gateway as it does hitting each port directly.
+- **Frontend cutover** — ✅ done. The React app never called a hardcoded host — `axios.js` uses `baseURL: '/api'`, and in dev that resolves through Vite's own proxy (`vite.config.js`). The *entire* cutover was one line: `server.proxy['/api'].target` from `http://localhost:8080` (monolith) to `http://localhost:9000` (gateway). Zero changes to any component or any `api/*.js` file. Verified in an actual browser: login → browse products → add to cart → place order, end to end, rendering a real order confirmation page (Order #9, PENDING, correct items/total) sourced entirely from the microservices.
+- **Admin reporting** — ✅ done, and it's the best proof yet that cutting over to the gateway was worth doing *before* declaring victory: it immediately surfaced `/api/admin/dashboard` returning a live `404`, a route the monolith had that nothing in the new stack replicated. Closed by adding it to order-service (owns 4 of the 5 routes' data directly) plus two tiny count endpoints on product-service/user-service. Along the way, hit and fixed the *exact same* Hibernate 6/Postgres null-parameter bug documented in `problems-overcomed.md` #12 — this time in an admin order-filter query instead of product search. Full story: [phases/Phase-16-Microservices-Intro.md](phases/Phase-16-Microservices-Intro.md) §16.8.
+- **Decommission the monolith** — the only remaining step. The monolith at `:8080` is still running, untouched, as a rollback path (revert the one proxy line to go back to it instantly).
 
 Explicitly **not** part of this phase (per the project's own roadmap): Kafka/event-driven messaging (Phase 17), CQRS/event sourcing (Phase 18), Kubernetes (Phase 19).
 

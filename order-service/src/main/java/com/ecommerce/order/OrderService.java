@@ -171,7 +171,8 @@ public class OrderService {
         return firstName != null ? firstName : email;
     }
 
-    private OrderResponse toResponse(Order order) {
+    /** public: AdminService (16.8) reuses this instead of duplicating the mapping. */
+    public OrderResponse toResponse(Order order) {
         List<OrderItemResponse> items = order.getItems().stream()
                 .map(item -> OrderItemResponse.builder()
                         .orderItemId(item.getId())

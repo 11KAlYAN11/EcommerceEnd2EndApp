@@ -524,3 +524,57 @@ flowchart TB
 ```
 
 All 6 domains from the monolith are now independently-running services with their own databases. Still ahead, **not part of "done"**: an API Gateway (single entry point — right now each service is called on its own port directly), pointing the frontend at it, and only then retiring the monolith. See the dedicated migration write-up for the full picture end to end.
+
+---
+
+## 16.8 — closing the admin-dashboard gap (found after UI cutover)
+
+After the frontend was pointed at the gateway (16.7), a real gap surfaced: the UI's Admin page called `/api/admin/dashboard` and friends — routes the monolith had, that nothing in the new stack replicated. Confirmed live: `404` through the gateway.
+
+```mermaid
+flowchart LR
+    C[Admin UI] -->|GET /admin/dashboard| GW[gateway]
+    GW -->|routes to| OS[order-service]
+    OS -->|"revenue, orders-by-status,<br/>top-customers -- own data,<br/>no network call"| OS
+    OS -->|GET /products/count| PS[product-service]
+    OS -->|GET /users/count -- admin-gated| US[user-service]
+    style OS fill:#c53030,color:#fff
+```
+
+**Why it lives on order-service, not a new admin-service**: 4 of the 5 routes (`revenue`, `top-customers`, `orders-by-status`, `filtered orders`, `update status`) are pure order-service data — the monolith's `AdminDashboardService` only needed `OrderRepository` for those, same as here. Only the dashboard *summary* needs two extra numbers (`totalProducts`, `totalUsers`), fetched from product-service/user-service the same required-fetch way every other cross-service read has worked all along. Standing up a whole separate service just to make 2 HTTP calls and re-host 4 endpoints that already belong to order-service would be over-engineering, not correctness.
+
+**A second real bug found while building this**: `findByFilters` (admin's "all orders" view) used the same `(:status IS NULL OR o.status = :status)` JPQL shape the monolith's product search once used — and hit the *exact* documented Hibernate 6 / Postgres bug (`problems-overcomed.md` #12: "could not determine data type of parameter"). Fixed the same proven way: `JpaSpecificationExecutor` + a small `OrderSpec` class (mirrors product-service's `ProductSpec`), not JPQL.
+
+**Verified live**, fully consistent across calls: dashboard showed `totalOrders: 14`, `ordersByStatus.PENDING: 8`; filtering `/admin/orders?status=PENDING` returned exactly 8; marking one order `DELIVERED` via `PATCH /admin/orders/{id}/status` made `totalRevenue` jump from `0` to that order's exact total on the next dashboard call.
+
+**Also fixed in the same pass**: the frontend navbar's "API Docs" link was hardcoded to the monolith's Swagger UI (`:8080`, not running). None of the 7 new services have `springdoc-openapi` wired up yet — a real, separate piece of future work, not faked here. Link removed rather than left dead; the Postman collection is the working API reference until per-service (or gateway-aggregated) Swagger exists.
+
+### What's next?
+Monolith decommission is now the only item left on the original Phase 16 roadmap.
+
+---
+
+## 16.7 — api-gateway (single entry point)
+
+```mermaid
+flowchart LR
+    C[Client] -->|":9000, one port"| GW[api-gateway]
+    GW -->|"/api/auth/**, /api/dev/**, /api/addresses/**"| U[user :8082]
+    GW -->|"/api/products/**, /api/categories/**, /api/search/**"| P[product :8083]
+    GW -->|"/api/cart/**"| CT[cart :8084]
+    GW -->|"/api/orders/**"| O[order :8085]
+    GW -->|"/api/payments/**"| PAY[payment :8086]
+    GW -->|"/api/notifications/**"| N[notification :8081]
+    style GW fill:#2b6cb0,color:#fff
+```
+
+**No path rewriting needed anywhere.** Every service already exposes its business routes under `/api/...` (5 via `server.servlet.context-path=/api`, notification-service via its controller's own `@RequestMapping("/api/notifications")` despite having no context-path). Whatever path the client sends the gateway forwards byte-for-byte to the matching service.
+
+**No JWT validation at the gateway — deliberately.** The pattern since product-service (16.3) has been: every service validates the token itself, independently. Making the gateway the one place that checks JWTs would quietly change that into "every service trusts whichever box sits in front of it," which is a different (weaker) security model. The gateway stays a dumb router; auth still depends only on the token, exactly as before.
+
+**The one deliberate stack inconsistency**: `spring-cloud-starter-gateway` is WebFlux/Netty (reactive), while every other service here is Servlet/Tomcat (blocking). That's not an oversight — it's what "Spring Cloud Gateway" means by default. (Spring Cloud 2023.0.x also ships a blocking `spring-cloud-starter-gateway-mvc` variant, not used here, worth knowing it exists.)
+
+**Verified live**: full purchase chain — login → create category → create product → add to cart → place order → trigger a notification — run entirely through `:9000`, never touching 8081–8086 directly. Every hop worked identically to calling each service's own port.
+
+### What's next?
+Frontend cutover — point `VITE_API_URL` at `:9000` instead of the monolith's `:8080` — then, only after that's confirmed working, decommission the monolith.

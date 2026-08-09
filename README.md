@@ -127,6 +127,57 @@ npm run dev
 
 ---
 
+## Microservices (Phase 16 — in progress)
+
+The monolith above is being extracted into 6 independent services + an API Gateway, running **in parallel** — the monolith is untouched and still works exactly as documented above. Full story with diagrams: [docs/MIGRATION.md](docs/MIGRATION.md). Step-by-step build log: [docs/phases/Phase-16-Microservices-Intro.md](docs/phases/Phase-16-Microservices-Intro.md).
+
+### Prerequisites
+- Everything above (Java 17+, Maven, PostgreSQL 15, Node 18+)
+- 5 extra databases on the same Postgres instance: `ecommerce_users`, `ecommerce_products`, `ecommerce_cart`, `ecommerce_orders`, `ecommerce_payments` (`notification-service` needs none)
+- Redis running (product-service uses logical DB slot 1 — separate from the monolith's slot 0, so caches don't collide)
+
+### Start everything
+
+```bash
+# 1. Build every service once (or after a code change)
+for s in notification-service user-service product-service cart-service order-service payment-service api-gateway; do
+  (cd $s && ../mvnw -q package -DskipTests)
+done
+
+# 2. Start all 6 services + gateway, waits for health
+./verify-services.sh start all
+./verify-services.sh status      # confirm all UP
+
+# 3. Frontend — vite.config.js already points at the gateway (:9000), not the monolith
+npm --prefix frontend run dev
+```
+
+Open **http://localhost:5173** — the UI now runs entirely on the microservices, through the gateway.
+
+### Ports
+
+| Service | Port | Notes |
+|---|---|---|
+| **api-gateway** | **9000** | single entry point — use this from a browser/UI, not the ports below |
+| notification-service | 8081 | no database, fire-and-forget calls only |
+| user-service | 8082 | issues the JWT every other service trusts |
+| product-service | 8083 | + Redis (cache slot 1) |
+| cart-service | 8084 | first service to *fetch* cross-service (product-service) |
+| order-service | 8085 | touches user, product, cart, notification |
+| payment-service | 8086 | reads + writes order-service |
+| monolith (still running, untouched) | 8080 | kept as reference / instant rollback path |
+
+- Full endpoint reference (every route, per service): `./verify-services.sh endpoints`
+- Full purchase-chain smoke test (login → cart → order → payment, 11 checks): `./verify-services.sh flow`
+- Postman collection (same flow, importable): [postman/ShopEase-Microservices.postman_collection.json](postman/ShopEase-Microservices.postman_collection.json)
+
+### Stop everything
+```bash
+./verify-services.sh stop all
+```
+
+---
+
 ## API Endpoint Reference
 
 All endpoints prefixed with `/api`.

@@ -42,6 +42,12 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success("Product fetched", productService.getProduct(id)));
     }
 
+    /** Called by order-service's admin dashboard summary (16.8). Public, same as everything else GET here. */
+    @GetMapping("/count")
+    public ResponseEntity<ApiResponse<Long>> countProducts() {
+        return ResponseEntity.ok(ApiResponse.success("Active product count", productService.countActive()));
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<ProductResponse>> createProduct(@Valid @RequestBody ProductRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)

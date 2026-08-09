@@ -34,6 +34,7 @@ SERVICES=(
   "cart:8084:cart-service/target/cart-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
   "order:8085:order-service/target/order-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
   "payment:8086:payment-service/target/payment-service-0.0.1-SNAPSHOT.jar:/api/actuator/health"
+  "gateway:9000:api-gateway/target/api-gateway-0.0.1-SNAPSHOT.jar:/actuator/health"
 )
 
 LOG_DIR="logs"
@@ -264,6 +265,16 @@ flow_test() {
 endpoints() {
   cat <<'EOF'
 ============================================================================
+ PREFERRED: api-gateway  :9000   -- single entry point, routes everything below
+============================================================================
+  Every /api/... path listed below also works unchanged through the gateway:
+    http://localhost:9000/api/auth/login   (instead of :8082/api/auth/login)
+  Same JWT, same behavior -- the gateway only routes, it does not validate
+  tokens itself (every service still checks its own). Direct per-service
+  ports below still work too; the gateway doesn't replace them, it fronts
+  them.
+
+============================================================================
  notification-service  :8081   (no context-path, no auth on any of these)
 ============================================================================
   GET  /actuator/health
@@ -282,6 +293,7 @@ endpoints() {
   GET  /api/addresses/default        [auth]
   GET  /api/dev/users                dev-profile only, no auth
   POST /api/dev/make-admin?email=    dev-profile only, no auth -- promotes a user to ROLE_ADMIN
+  GET  /api/users/count              [admin]  -- used by order-service's /admin/dashboard summary
 
   Seeded accounts: admin@test.com / Admin@123 (ROLE_ADMIN), user@test.com / User@123 (ROLE_USER)
 
@@ -300,6 +312,7 @@ endpoints() {
   PUT  /api/products/{id}                  [admin]
   DELETE /api/products/{id}                [admin]  (soft delete)
   PATCH /api/products/{id}/stock           [auth]   {"delta": -2}   -- negative=decrement, positive=restore
+  GET  /api/products/count                 public -- used by order-service's /admin/dashboard summary
   GET  /api/categories                     public
   POST /api/categories                     [admin]  {name, description?}
   GET  /api/search/products?q=&minPrice=&maxPrice=&categoryId=   public
@@ -323,6 +336,13 @@ endpoints() {
   GET    /api/orders/{id}
   DELETE /api/orders/{id}/cancel
   PATCH  /api/orders/{id}/confirm-payment  meant to be called by payment-service, not directly
+
+  -- Admin reporting (16.8), same routes the monolith had, now on order-service --
+  GET   /api/admin/dashboard               [admin]  totalRevenue, ordersByStatus, totalProducts, totalUsers
+  GET   /api/admin/revenue?from=&to=       [admin]  ISO datetimes, e.g. 2026-01-01T00:00:00
+  GET   /api/admin/top-customers?limit=10  [admin]
+  GET   /api/admin/orders?status=&from=&to=&page=&size=  [admin]  filter/paginate ALL orders
+  PATCH /api/admin/orders/{id}/status      [admin]  {"status": "SHIPPED"}
 
 ============================================================================
  payment-service  :8086   (context-path /api)   -- EVERYTHING here needs [auth]

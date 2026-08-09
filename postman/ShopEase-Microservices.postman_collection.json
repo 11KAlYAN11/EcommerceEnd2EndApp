@@ -1,0 +1,502 @@
+{
+  "info": {
+    "name": "ShopEase Microservices — Phase 16",
+    "description": "Covers all 6 domain services individually on their own ports, PLUS the same full purchase flow replayed entirely through the API Gateway (:9000).\n\n## Setup\n1. Start everything: `./verify-services.sh start all` (repo root)\n2. Import this collection\n3. Run **1. Health Checks** first — confirms all 7 processes (6 services + gateway) are up\n4. Work through folders 2-7 top to bottom (direct, per-service ports) — each folder auto-saves the IDs the next one needs via collection variables\n5. Then run folder **8. Via Gateway — Full Purchase Flow** top to bottom — same journey, one port (:9000) instead of six\n\nSeeded accounts (from user-service's DataSeeder): `admin@test.com` / `Admin@123` (ROLE_ADMIN), `user@test.com` / `User@123` (ROLE_USER).\n\nSee `docs/MIGRATION.md` and `verify-services.sh endpoints` for the full reference this collection mirrors.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "notificationUrl", "value": "http://localhost:8081", "type": "string" },
+    { "key": "userUrl", "value": "http://localhost:8082/api", "type": "string" },
+    { "key": "productUrl", "value": "http://localhost:8083/api", "type": "string" },
+    { "key": "cartUrl", "value": "http://localhost:8084/api", "type": "string" },
+    { "key": "orderUrl", "value": "http://localhost:8085/api", "type": "string" },
+    { "key": "paymentUrl", "value": "http://localhost:8086/api", "type": "string" },
+    { "key": "gatewayUrl", "value": "http://localhost:9000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "categoryId", "value": "", "type": "string" },
+    { "key": "productId", "value": "", "type": "string" },
+    { "key": "cartItemId", "value": "", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" },
+    { "key": "gwCategoryId", "value": "", "type": "string" },
+    { "key": "gwProductId", "value": "", "type": "string" },
+    { "key": "gwOrderId", "value": "", "type": "string" },
+    { "key": "dynamicEmail", "value": "", "type": "string" },
+    { "key": "dynamicCategoryName", "value": "", "type": "string" },
+    { "key": "gwDynamicCategoryName", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Health Checks (all 7 processes)",
+      "item": [
+        { "name": "notification-service health", "request": { "method": "GET", "url": "{{notificationUrl}}/actuator/health" } },
+        { "name": "user-service health", "request": { "method": "GET", "url": "{{userUrl}}/actuator/health" } },
+        { "name": "product-service health", "request": { "method": "GET", "url": "{{productUrl}}/actuator/health" } },
+        { "name": "cart-service health", "request": { "method": "GET", "url": "{{cartUrl}}/actuator/health" } },
+        { "name": "order-service health", "request": { "method": "GET", "url": "{{orderUrl}}/actuator/health" } },
+        { "name": "payment-service health", "request": { "method": "GET", "url": "{{paymentUrl}}/actuator/health" } },
+        { "name": "api-gateway health", "request": { "method": "GET", "url": "{{gatewayUrl}}/actuator/health" } }
+      ]
+    },
+    {
+      "name": "2. user-service — direct :8082",
+      "item": [
+        {
+          "name": "Login (Admin) -- sets {{token}}",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) {",
+            "    const body = pm.response.json();",
+            "    pm.collectionVariables.set('token', body.data.token);",
+            "    console.log('token saved');",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{userUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"Admin@123\"\n}" },
+            "description": "Seeded ROLE_ADMIN account. Use this before any [admin]-gated request below."
+          }
+        },
+        {
+          "name": "Login (Demo User) -- non-admin, for testing 403s",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{userUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@test.com\",\n  \"password\": \"User@123\"\n}" },
+            "description": "Does NOT overwrite {{token}} automatically (no test script) -- copy the token manually if you want to prove a ROLE_USER token gets 403 on admin routes."
+          }
+        },
+        {
+          "name": "Register a new user",
+          "event": [{ "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+            "pm.collectionVariables.set('dynamicEmail', 'postman-tester-' + Date.now() + '@example.com');"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{userUrl}}/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Postman\",\n  \"lastName\": \"Tester\",\n  \"email\": \"{{dynamicEmail}}\",\n  \"password\": \"secret123\",\n  \"phone\": \"9000000000\"\n}" },
+            "description": "Email is generated fresh every run (pre-request script sets {{dynamicEmail}}) -- User.email has a DB unique constraint, so a fixed literal here would 409 on the 2nd+ run against a real Postgres DB. Also triggers a welcome-email call to notification-service (fire-and-forget -- check notification-service's own log/console for the attempt)."
+          }
+        },
+        {
+          "name": "Get Default Address",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{userUrl}}/addresses/default",
+            "description": "404 is EXPECTED if this user has no addresses seeded -- order-service treats that as \"no address\", not an error."
+          }
+        },
+        {
+          "name": "Dev: List Users",
+          "request": { "method": "GET", "url": "{{userUrl}}/dev/users", "description": "dev-profile only, no auth required." }
+        },
+        {
+          "name": "Dev: Make Admin",
+          "request": {
+            "method": "POST",
+            "url": "{{userUrl}}/dev/make-admin?email={{dynamicEmail}}",
+            "description": "dev-profile only, no auth required. Promotes {{dynamicEmail}} (set by \"Register a new user\" above -- run that first) to ROLE_ADMIN -- they must log in again afterward to get a token with the new role."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. product-service — direct :8083",
+      "item": [
+        {
+          "name": "List Products (public, no token)",
+          "request": { "method": "GET", "url": "{{productUrl}}/products?page=0&size=10" }
+        },
+        {
+          "name": "List Categories (public)",
+          "request": { "method": "GET", "url": "{{productUrl}}/categories" }
+        },
+        {
+          "name": "Create Category [admin] -- sets {{categoryId}}",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('dynamicCategoryName', 'Postman Electronics ' + Date.now());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 201) {",
+              "    pm.collectionVariables.set('categoryId', pm.response.json().data.id);",
+              "}"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{productUrl}}/categories",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"{{dynamicCategoryName}}\",\n  \"description\": \"Created via Postman\"\n}" },
+            "description": "Name is generated fresh every run -- Category.name has a DB unique constraint (same lesson learned the hard way in verify-services.sh's flow test earlier)."
+          }
+        },
+        {
+          "name": "Create Product [admin] -- sets {{productId}}",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "    pm.collectionVariables.set('productId', pm.response.json().data.id);",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{productUrl}}/products",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Postman Test Phone\",\n  \"description\": \"Created via Postman\",\n  \"price\": 29999.00,\n  \"stockQuantity\": 20,\n  \"categoryId\": {{categoryId}}\n}" }
+          }
+        },
+        {
+          "name": "Get Product by Id",
+          "request": { "method": "GET", "url": "{{productUrl}}/products/{{productId}}" }
+        },
+        {
+          "name": "Search Products",
+          "request": { "method": "GET", "url": "{{productUrl}}/search/products?q=Postman&minPrice=1&maxPrice=100000" }
+        },
+        {
+          "name": "Adjust Stock [auth] -- what order-service calls internally",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{productUrl}}/products/{{productId}}/stock",
+            "body": { "mode": "raw", "raw": "{\n  \"delta\": -1\n}" },
+            "description": "Negative = decrement (order placed), positive = restore (order cancelled). Requires only SOME valid token, not admin -- see docs/MIGRATION.md gaps table."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. cart-service — direct :8084 (everything needs [auth])",
+      "item": [
+        {
+          "name": "Add Item to Cart -- sets {{cartItemId}}",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) {",
+            "    const items = pm.response.json().data.items;",
+            "    if (items.length) pm.collectionVariables.set('cartItemId', items[items.length - 1].cartItemId);",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{cartUrl}}/cart/items",
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 2\n}" },
+            "description": "cart-service calls product-service internally here (GET /products/{id}) to fetch a live price/stock snapshot -- watch product-service's log for the GET while this runs."
+          }
+        },
+        {
+          "name": "Get Cart",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{cartUrl}}/cart" }
+        },
+        {
+          "name": "Update Item Quantity",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{cartUrl}}/cart/items/{{cartItemId}}?quantity=3"
+          }
+        },
+        {
+          "name": "Remove Item",
+          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{cartUrl}}/cart/items/{{cartItemId}}" }
+        },
+        {
+          "name": "Clear Cart",
+          "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{cartUrl}}/cart", "description": "Cleans up after the Remove Item test above. NOTE: this is deliberately NOT the last request in this folder -- folder 5's Place Order needs items actually IN the cart, so \"Re-add Item\" below runs after this, not before." }
+        },
+        {
+          "name": "Re-add Item (final state: cart has 1 item, ready for folder 5)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{cartUrl}}/cart/items",
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": {{productId}},\n  \"quantity\": 2\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. order-service — direct :8085 (everything needs [auth])",
+      "item": [
+        {
+          "name": "Place Order -- sets {{orderId}}",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "    pm.collectionVariables.set('orderId', pm.response.json().data.orderId);",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{orderUrl}}/orders",
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Requires items in cart-service's cart first (folder 4). Internally calls: cart-service (read+clear), product-service (fresh price/stock, decrement), user-service (address), notification-service (fire-and-forget confirmation)."
+          }
+        },
+        {
+          "name": "Get My Orders",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{orderUrl}}/orders?page=0&size=10" }
+        },
+        {
+          "name": "Get Order by Id",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{orderUrl}}/orders/{{orderId}}" }
+        }
+      ]
+    },
+    {
+      "name": "6. payment-service — direct :8086 (everything needs [auth])",
+      "item": [
+        {
+          "name": "Initiate Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{paymentUrl}}/payments/initiate/{{orderId}}?method=UPI",
+            "description": "method: CREDIT_CARD | DEBIT_CARD | UPI | NET_BANKING | WALLET | COD. Internally calls order-service (GET /orders/{id}) to fetch the amount + ownership check."
+          }
+        },
+        {
+          "name": "Confirm Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{paymentUrl}}/payments/confirm/{{orderId}}",
+            "description": "Internally calls order-service's PATCH /orders/{id}/confirm-payment -- check Get Order by Id afterward, status should flip PENDING -> CONFIRMED."
+          }
+        },
+        {
+          "name": "Get Payment for Order",
+          "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{paymentUrl}}/payments/order/{{orderId}}" }
+        }
+      ]
+    },
+    {
+      "name": "7. notification-service — direct :8081 (no auth on any of these)",
+      "item": [
+        {
+          "name": "Send Welcome Email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{notificationUrl}}/api/notifications/welcome",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientEmail\": \"postman@example.com\",\n  \"firstName\": \"Postman\"\n}" },
+            "description": "Expect 202 Accepted immediately, then check notification-service's console for an 'email-1' thread log line -- it'll fail on the fake Gmail creds, that's expected."
+          }
+        },
+        {
+          "name": "Send Order Confirmation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{notificationUrl}}/api/notifications/order-confirmation",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientEmail\": \"postman@example.com\",\n  \"firstName\": \"Postman\",\n  \"orderId\": 999,\n  \"status\": \"PENDING\",\n  \"totalPrice\": 59998.00,\n  \"items\": [\n    { \"productName\": \"Postman Test Phone\", \"quantity\": 2, \"priceAtPurchase\": 29999.00 }\n  ],\n  \"placedAt\": \"2026-08-09T12:00:00\"\n}" }
+          }
+        },
+        {
+          "name": "Send Order Cancellation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{notificationUrl}}/api/notifications/order-cancellation",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientEmail\": \"postman@example.com\",\n  \"firstName\": \"Postman\",\n  \"orderId\": 999,\n  \"totalPrice\": 59998.00\n}" }
+          }
+        },
+        {
+          "name": "Send Low Stock Alert",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{notificationUrl}}/api/notifications/low-stock-alert",
+            "body": { "mode": "raw", "raw": "{\n  \"productName\": \"Postman Test Phone\",\n  \"remainingStock\": 2\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Via Gateway — Full Purchase Flow (:9000 only)",
+      "description": "Same journey as folders 2-6, but every request goes through the gateway on one port. Run this folder top-to-bottom (Postman Runner or manually) with nothing but :9000 in the URL bar. Uses its own gw*Id variables so it doesn't collide with the direct-service run above.",
+      "item": [
+        {
+          "name": "1. Login (Admin) via Gateway",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 200) {",
+            "    pm.collectionVariables.set('token', pm.response.json().data.token);",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"Admin@123\"\n}" }
+          }
+        },
+        {
+          "name": "2. Create Category via Gateway",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "pm.collectionVariables.set('gwDynamicCategoryName', 'Gateway Test Category ' + Date.now());"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "if (pm.response.code === 201) {",
+              "    pm.collectionVariables.set('gwCategoryId', pm.response.json().data.id);",
+              "}"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/categories",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"{{gwDynamicCategoryName}}\",\n  \"description\": \"via gateway\"\n}" }
+          }
+        },
+        {
+          "name": "3. Create Product via Gateway",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "    pm.collectionVariables.set('gwProductId', pm.response.json().data.id);",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/products",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Gateway Test Product\",\n  \"price\": 4999.00,\n  \"stockQuantity\": 10,\n  \"categoryId\": {{gwCategoryId}}\n}" }
+          }
+        },
+        {
+          "name": "4. Add to Cart via Gateway",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/cart/items",
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": {{gwProductId}},\n  \"quantity\": 1\n}" }
+          }
+        },
+        {
+          "name": "5. Place Order via Gateway",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "if (pm.response.code === 201) {",
+            "    pm.collectionVariables.set('gwOrderId', pm.response.json().data.orderId);",
+            "}"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/orders",
+            "body": { "mode": "raw", "raw": "{}" }
+          }
+        },
+        {
+          "name": "6. Initiate Payment via Gateway",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{gatewayUrl}}/api/payments/initiate/{{gwOrderId}}?method=UPI"
+          }
+        },
+        {
+          "name": "7. Confirm Payment via Gateway",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{gatewayUrl}}/api/payments/confirm/{{gwOrderId}}"
+          }
+        },
+        {
+          "name": "8. Get Order via Gateway -- confirm status is CONFIRMED",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{gatewayUrl}}/api/orders/{{gwOrderId}}"
+          }
+        },
+        {
+          "name": "9. Trigger a Notification via Gateway",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{gatewayUrl}}/api/notifications/welcome",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientEmail\": \"gateway-test@example.com\",\n  \"firstName\": \"Gateway\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Optional — Alternate Paths (do NOT add to a full sequential run)",
+      "description": "These two intentionally conflict with the happy path above if run in sequence with it -- that's why they live in their own folder instead of folders 5/6. Run them standalone, manually, whenever you want to see the alternate behavior. Both use {{orderId}} from folder 5's direct (non-gateway) run.",
+      "item": [
+        {
+          "name": "Cancel Order (direct order-service)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{orderUrl}}/orders/{{orderId}}/cancel",
+            "description": "Restores stock via product-service, sets order CANCELLED. If you run this BEFORE folder 6 (payment), payment initiation will then correctly fail with 400 \"Cannot pay for a cancelled order\" -- that's the intended behavior to see, not a bug, but it's why this isn't in the main sequential flow."
+          }
+        },
+        {
+          "name": "Fail Payment (direct payment-service)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{paymentUrl}}/payments/fail/{{orderId}}",
+            "description": "Sets the payment for {{orderId}} to FAILED regardless of its current status -- order status is untouched (stays whatever it was). Run this INSTEAD of \"Confirm Payment\" in folder 6, not after it, or you'll overwrite a COMPLETED payment back to FAILED."
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Admin Reporting (16.8 -- lives on order-service, :8085)",
+      "description": "Closes the gap the frontend cutover exposed. All [admin]-gated, uses {{token}} from folder 2's admin login. Dashboard summary calls product-service and user-service internally for counts -- watch their logs for GET /products/count and GET /users/count while it runs.",
+      "item": [
+        {
+          "name": "Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{orderUrl}}/admin/dashboard",
+            "description": "totalRevenue (DELIVERED orders only), totalOrders, ordersByStatus, totalProducts (from product-service), totalUsers (from user-service)."
+          }
+        },
+        {
+          "name": "Revenue Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{orderUrl}}/admin/revenue?from=2020-01-01T00:00:00&to=2030-01-01T00:00:00"
+          }
+        },
+        {
+          "name": "Top Customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{orderUrl}}/admin/top-customers?limit=5"
+          }
+        },
+        {
+          "name": "All Orders (filtered, paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{orderUrl}}/admin/orders?status=PENDING&page=0&size=10",
+            "description": "status is optional -- omit it to see every order regardless of status. Uses JpaSpecificationExecutor under the hood (see 16.8 notes on why a plain JPQL null-check query broke here)."
+          }
+        },
+        {
+          "name": "Update Order Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{orderUrl}}/admin/orders/{{orderId}}/status",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"DELIVERED\"\n}" },
+            "description": "Valid values: PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED. Marking an order DELIVERED is what makes it count toward Revenue Report / Dashboard Summary's totalRevenue."
+          }
+        }
+      ]
+    }
+  ]
+}

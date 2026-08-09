@@ -62,4 +62,10 @@ public class ProductClient {
                 .retrieve()
                 .toBodilessEntity();
     }
+
+    /** 16.8: admin dashboard summary needs a total product count -- product-service is the only one who knows it. */
+    public long countActive() {
+        Map<String, Object> body = restClient.get().uri("/api/products/count").retrieve().body(Map.class);
+        return Long.parseLong(body.get("data").toString());
+    }
 }
