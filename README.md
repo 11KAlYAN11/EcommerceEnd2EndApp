@@ -16,32 +16,32 @@ ShopEase is a full-stack teaching project designed to take a developer from zero
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                         CLIENT LAYER                           │
-│   React 18 + Vite (port 5173)  │  Postman / curl              │
+│   React 18 + Vite (port 5173)  │  Postman / curl               │
 └───────────────────────────────────────────┬────────────────────┘
                                             │ HTTP / JSON
                                             ▼
 ┌────────────────────────────────────────────────────────────────┐
 │               Spring Boot 3.3 API  (port 8080, context /api)   │
 │                                                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐  │
-│  │ Controllers │→ │  Services   │→ │    Repositories      │  │
-│  │  (REST)     │  │ (business)  │  │  (Spring Data JPA)   │  │
-│  └─────────────┘  └─────────────┘  └──────────────────────┘  │
-│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐  │
-│  │  Security   │  │ Redis Cache │  │  Async Email (@Async) │  │
-│  │ JWT Filter  │  │ @Cacheable  │  │  Gmail SMTP           │  │
-│  └─────────────┘  └─────────────┘  └──────────────────────┘  │
-│  ┌─────────────┐  ┌─────────────┐                             │
-│  │  Rate Limit │  │  Prometheus │                             │
-│  │  (Filter)   │  │  /actuator  │                             │
-│  └─────────────┘  └─────────────┘                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐    │
+│  │ Controllers │→ │  Services   │→ │    Repositories      │    │
+│  │  (REST)     │  │ (business)  │  │  (Spring Data JPA)   │    │
+│  └─────────────┘  └─────────────┘  └──────────────────────┘    │
+│  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐    │
+│  │  Security   │  │ Redis Cache │  │  Async Email (@Async)│    │
+│  │ JWT Filter  │  │ @Cacheable  │  │  Gmail SMTP          │    │
+│  └─────────────┘  └─────────────┘  └──────────────────────┘    │
+│  ┌─────────────┐  ┌─────────────┐                              │
+│  │  Rate Limit │  │  Prometheus │                              │
+│  │  (Filter)   │  │  /actuator  │                              │
+│  └─────────────┘  └─────────────┘                              │
 └───────────────────────────────┬────────────────────────────────┘
                                 │
               ┌─────────────────┴──────────────────┐
               ▼                                    ▼
    ┌────────────────────┐              ┌───────────────────┐
-   │   PostgreSQL 15    │              │    Redis 7         │
-   │  (primary store)   │              │  (cache + session) │
+   │   PostgreSQL 15    │              │    Redis 7        │
+   │  (primary store)   │              │  (cache + session)│
    └────────────────────┘              └───────────────────┘
 ```
 
