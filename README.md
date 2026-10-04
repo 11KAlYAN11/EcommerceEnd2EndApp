@@ -122,14 +122,14 @@ npm run dev
 **Default credentials (after seeding):**
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@test.com` | `admin123` |
+| Admin | `admin@test.com` | `Admin@123` |
 | User | any registered email | your password |
 
 ---
 
 ## Microservices (Phase 16 — in progress)
 
-The monolith above is being extracted into 6 independent services + an API Gateway, running **in parallel** — the monolith is untouched and still works exactly as documented above. Full story with diagrams: [docs/MIGRATION.md](docs/MIGRATION.md). Step-by-step build log: [docs/phases/Phase-16-Microservices-Intro.md](docs/phases/Phase-16-Microservices-Intro.md).
+The monolith above is being extracted into 6 independent services + an API Gateway, running **in parallel** — the monolith is untouched and still works exactly as documented above. Full story with diagrams: [docs/MIGRATION.md](docs/MIGRATION.md). Step-by-step build log: [docs/phases/Phase-16-Microservices-Intro.md](docs/phases/Phase-16-Microservices-Intro.md). For the live request, auth, database, Redis, and rate-limit map, see [docs/Phase-16-Runtime-Flow.md](docs/Phase-16-Runtime-Flow.md).
 
 ### Prerequisites
 - Everything above (Java 17+, Maven, PostgreSQL 15, Node 18+)
@@ -153,6 +153,50 @@ npm --prefix frontend run dev
 ```
 
 Open **http://localhost:5173** — the UI now runs entirely on the microservices, through the gateway.
+
+### Start services manually (Windows PowerShell)
+
+Use this when you want to run or debug one service at a time. Open one PowerShell tab per row, run the command from that module's directory, and leave the process running. Start in the listed order so downstream services are ready before the gateway receives traffic.
+
+| Start order | Module / service | Port | Command to run inside the module folder |
+|---:|---|---:|---|
+| 1 | `notification-service` | 8081 | `..\mvnw.cmd spring-boot:run` |
+| 2 | `user-service` | 8082 | `..\mvnw.cmd spring-boot:run` |
+| 3 | `product-service` | 8083 | `..\mvnw.cmd spring-boot:run` |
+| 4 | `cart-service` | 8084 | `..\mvnw.cmd spring-boot:run` |
+| 5 | `order-service` | 8085 | `..\mvnw.cmd spring-boot:run` |
+| 6 | `payment-service` | 8086 | `..\mvnw.cmd spring-boot:run` |
+| 7 | `api-gateway` | 9000 | `..\mvnw.cmd spring-boot:run` |
+
+For example, to run only the product service:
+
+```powershell
+cd .\product-service
+..\mvnw.cmd spring-boot:run
+```
+
+Run the same three lines below in each service folder, replacing the folder name. The gateway should be last:
+
+```powershell
+cd .\notification-service
+..\mvnw.cmd spring-boot:run
+```
+
+The existing `verify-services.sh` runner is convenient in Git Bash or WSL:
+
+```bash
+./verify-services.sh start all
+./verify-services.sh status
+```
+
+It runs the already-built JARs. After code changes, rebuild the changed module first:
+
+```powershell
+cd .\product-service
+..\mvnw.cmd package -DskipTests
+```
+
+When using the UI, `frontend/vite.config.js` must target `http://localhost:9000`; restart Vite after changing that file.
 
 ### Ports
 
